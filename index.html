@@ -1,11 +1,274 @@
+<!-- /public/index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Camino Minimo</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dijkstra — Camino Mínimo (Funcional)</title>
+  <link rel="stylesheet" href="public/styles/style.css" />
+  <meta name="color-scheme" content="dark" />
 </head>
 <body>
-    
+  <a class="skip-link" href="#panelTabs">Saltar a paneles</a>
+
+  <header class="app-header" role="banner">
+    <div class="header-left">
+      <button id="btnToggleSidebar" class="btn icon" aria-label="Mostrar/ocultar pasos" title="Pasos">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h12v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+      </button>
+      <h1 id="appTitle" class="app-title" tabindex="0">Dijkstra — Camino Mínimo</h1>
+    </div>
+    <div class="header-right">
+      <button id="btnLoadSample" class="btn ghost" title="Cargar ejemplo">Cargar ejemplo</button>
+      <button id="btnReset" class="btn danger" title="Reiniciar">Reiniciar</button>
+      <button id="btnHelp" class="btn" aria-haspopup="dialog" aria-controls="modalHelp" title="Ayuda">Ayuda</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- Sidebar / Wizard -->
+    <aside class="sidebar" aria-label="Asistente por pasos">
+      <nav class="steps">
+        <ol>
+          <li class="step is-active" data-step="1"><button type="button" class="step-btn" aria-controls="step1">1. Tamaño y modo</button></li>
+          <li class="step" data-step="2"><button type="button" class="step-btn" aria-controls="step2">2. Construcción</button></li>
+          <li class="step" data-step="3"><button type="button" class="step-btn" aria-controls="step3">3. Ruta y animación</button></li>
+          <li class="step" data-step="4"><button type="button" class="step-btn" aria-controls="step4">4. Resultados</button></li>
+        </ol>
+      </nav>
+
+      <section id="step1" class="card step-panel" data-step-panel="1">
+        <header class="card-header">
+          <h2>Tamaño y modo</h2>
+          <span id="modeBadge" class="badge">modo: —</span>
+        </header>
+        <div class="field">
+          <label for="inpN">Número de nodos (8–16)</label>
+          <input id="inpN" type="number" min="8" max="16" inputmode="numeric" placeholder="8–16" />
+          <p class="hint">Pulsa “Cargar ejemplo” si es tu primera vez.</p>
+          <p id="nError" class="field-error" role="alert" hidden>El número de nodos debe estar entre 8 y 16.</p>
+        </div>
+        <div class="actions">
+          <button id="btnGenRandom" class="btn primary">Generar aleatorio</button>
+          <button id="btnGenManual" class="btn">Construcción manual</button>
+        </div>
+      </section>
+
+      <section id="step2" class="card step-panel" data-step-panel="2" hidden>
+        <header class="card-header"><h2>Construcción</h2></header>
+
+        <div class="toolbar">
+          <button id="btnAddNode" class="btn" title="Añadir nodo y hacer clic en el lienzo">Añadir nodo</button>
+          <button id="btnAddEdge" class="btn" title="Añadir arista (usa el formulario)">Añadir arista</button>
+          <button id="btnAutoComplete" class="btn ghost" title="Autocompletar ejemplo">Autocompletar</button>
+          <button id="btnClearGraph" class="btn danger" title="Vaciar grafo">Vaciar</button>
+        </div>
+
+        <fieldset class="quick-edge">
+          <legend>Arista rápida</legend>
+          <div class="grid-4">
+            <label>Desde
+              <input id="edgeFrom" list="nodesList" placeholder="A" />
+            </label>
+            <label>Hasta
+              <input id="edgeTo" list="nodesList" placeholder="B" />
+            </label>
+            <label>Peso
+              <input id="edgeWeight" type="number" min="0" step="1" placeholder="1" />
+            </label>
+            <label class="checkbox">
+              <input id="edgeDirected" type="checkbox" checked disabled />
+              Dirigida
+            </label>
+          </div>
+          <button id="btnQuickAddEdge" class="btn primary">Añadir arista</button>
+          <datalist id="nodesList"></datalist>
+        </fieldset>
+
+        <div class="table-wrap">
+          <table id="edgesTable" aria-describedby="edgesCaption">
+            <caption id="edgesCaption">Aristas</caption>
+            <thead>
+              <tr><th>Desde</th><th>Hasta</th><th>Peso</th><th>Acciones</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="step3" class="card step-panel" data-step-panel="3" hidden>
+        <header class="card-header"><h2>Selección y animación</h2></header>
+
+        <div class="grid-2">
+          <label for="selSource">Origen</label>
+          <select id="selSource"><option value="">—</option></select>
+
+          <label for="selTarget">Destino</label>
+          <select id="selTarget"><option value="">—</option></select>
+        </div>
+
+        <div class="player">
+          <button id="btnRun" class="btn primary">Ejecutar</button>
+          <div class="player-controls" aria-label="Controles de animación">
+            <button id="btnPrev" class="btn icon" disabled title="Anterior">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/></svg>
+            </button>
+            <button id="btnPlay" class="btn icon" disabled title="Reproducir">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+            </button>
+            <button id="btnPause" class="btn icon" disabled hidden title="Pausar">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>
+            </button>
+            <button id="btnNext" class="btn icon" disabled title="Siguiente">
+              <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M16 6h2v12h-2V6zM6 18l8.5-6L6 6v12z"/></svg>
+            </button>
+            <button id="btnReplay" class="btn ghost" disabled title="Reiniciar">Reiniciar</button>
+          </div>
+
+          <label for="rangeSpeed">Velocidad</label>
+          <input id="rangeSpeed" type="range" min="0.25" max="3" value="1" step="0.25" />
+          <label for="progress">Paso</label>
+          <input id="progress" type="range" min="0" max="0" value="0" step="1" />
+        </div>
+
+        <div class="live">
+          <div>Cola: <span id="liveQueue" class="mono">[]</span></div>
+          <div>Extraído: <span id="liveExtracted" class="mono">—</span></div>
+          <div>Iteración: <span id="liveIteration" class="mono">0</span></div>
+        </div>
+      </section>
+
+      <section id="step4" class="card step-panel" data-step-panel="4" hidden>
+        <header class="card-header"><h2>Resultados</h2></header>
+        <div class="results">
+          <div class="key-value"><span>Costo mínimo</span><strong id="pathCost">—</strong></div>
+          <div>
+            <h3>Caminos</h3>
+            <ul id="pathsList" class="paths"></ul>
+          </div>
+          <div class="export">
+            <button id="btnExportJSON" class="btn">Exportar JSON</button>
+            <button id="btnExportPNG" class="btn ghost">Exportar PNG</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Workspace -->
+    <section class="workspace">
+      <div class="canvas-card card">
+        <div class="canvas-toolbar" role="toolbar" aria-label="Herramientas del canvas">
+          <button id="btnZoomIn" class="btn icon" title="Acercar">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zm1-7h-2v2H6v2h2v2h2v-2h2V9h-2V7z"/></svg>
+          </button>
+          <button id="btnZoomOut" class="btn icon" title="Alejar">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM7 10h5v2H7z"/></svg>
+          </button>
+          <button id="btnCenter" class="btn ghost" title="Centrar">Centrar</button>
+          <button id="btnScreenshot" class="btn" title="Captura">Captura</button>
+        </div>
+        <div class="canvas-wrap grid-on" id="canvasWrap">
+          <canvas id="graphCanvas" width="1200" height="800" aria-label="Lienzo del grafo"></canvas>
+        </div>
+      </div>
+
+      <div class="panels card">
+        <div id="panelTabs" role="tablist" aria-label="Paneles">
+          <button id="tabLog" role="tab" aria-selected="true" aria-controls="logPanel" tabindex="0" class="tab is-active">Bitácora</button>
+          <button id="tabDistances" role="tab" aria-selected="false" aria-controls="distancesPanel" tabindex="-1" class="tab">Distancias</button>
+          <button id="tabPaths" role="tab" aria-selected="false" aria-controls="pathsPanel" tabindex="-1" class="tab">Caminos</button>
+          <button id="tabInspector" role="tab" aria-selected="false" aria-controls="inspectorPanel" tabindex="-1" class="tab">Inspector</button>
+        </div>
+
+        <section id="logPanel" role="tabpanel" aria-labelledby="tabLog">
+          <ol id="logStream" aria-live="polite" class="log"></ol>
+        </section>
+
+        <section id="distancesPanel" role="tabpanel" aria-labelledby="tabDistances" hidden>
+          <div class="table-wrap">
+            <table id="distTable">
+              <thead><tr><th>Nodo</th><th>Dist</th><th>Prev</th><th>Estado</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="pathsPanel" role="tabpanel" aria-labelledby="tabPaths" hidden>
+          <ul id="minPaths" class="paths"></ul>
+        </section>
+
+        <section id="inspectorPanel" role="tabpanel" aria-labelledby="tabInspector" hidden>
+          <div class="inspector">
+            <div class="grid-2">
+              <label>Elemento
+                <input id="inspectorElement" type="text" value="—" readonly />
+              </label>
+              <label>Peso
+                <input id="inspectorWeight" type="number" value="—" readonly />
+              </label>
+            </div>
+            <div class="actions">
+              <button class="btn ghost" id="btnInspectorSelect">Seleccionar demo</button>
+              <button class="btn" id="btnInspectorEdit">Editar</button>
+              <button class="btn danger" id="btnInspectorDelete">Eliminar</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modales -->
+  <dialog id="modalHelp" class="modal">
+    <form method="dialog" class="modal-card card">
+      <header class="card-header"><h3>Ayuda rápida</h3></header>
+      <div class="modal-body">
+        <p><strong>Cómo usar:</strong></p>
+        <ol>
+          <li>En <em>Tamaño y modo</em> elige 8–16 nodos y pulsa <em>Generar</em> o <em>Manual</em>.</li>
+          <li>En <em>Construcción</em> añade nodos (clic en lienzo) y aristas (formulario).</li>
+          <li>En <em>Ruta y animación</em> selecciona Origen/Destino y pulsa <em>Ejecutar</em>.</li>
+          <li>Revisa <em>Resultados</em> y exporta si quieres.</li>
+        </ol>
+        <p><strong>Leyenda:</strong> Visitado=verde, En cola=amarillo, Mejora=halo verde, Empate=azul, Sin mejora=gris.</p>
+        <p><strong>Atajos:</strong> Alt+1..4 pasos; Espacio Play/Pause; ←/→ anterior/siguiente; Rueda=pan, Ctrl+rueda=zoom.</p>
+      </div>
+      <div class="modal-actions"><button class="btn">Cerrar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="modalEdgeEditor" class="modal">
+    <form method="dialog" class="modal-card card">
+      <header class="card-header"><h3>Editar arista</h3></header>
+      <div class="modal-body">
+        <div class="grid-3">
+          <label>Desde <input id="editFrom" /></label>
+          <label>Hasta <input id="editTo" /></label>
+          <label>Peso <input id="editWeight" type="number" min="0" step="1" /></label>
+        </div>
+        <label class="checkbox"><input id="editDirected" type="checkbox" checked /> Dirigida</label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" value="save">Guardar</button>
+        <button class="btn ghost" value="cancel">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="modalConfirm" class="modal" aria-labelledby="confirmTitle" aria-describedby="confirmDesc">
+    <form method="dialog" class="modal-card card">
+      <header class="card-header"><h3 id="confirmTitle">Confirmar borrado</h3></header>
+      <div class="modal-body"><p id="confirmDesc">¿Eliminar este elemento?</p></div>
+      <div class="modal-actions">
+        <button class="btn danger" value="confirm">Eliminar</button>
+        <button class="btn ghost" value="cancel">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Toasts -->
+  <div id="toastArea" class="toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="public/scripts/ui.js" defer></script>
 </body>
 </html>
