@@ -13,7 +13,7 @@
 
   <header class="app-header" role="banner">
     <div class="header-left">
-      <button id="btnToggleSidebar" class="btn icon" aria-label="Mostrar/ocultar pasos" title="Pasos">
+      <button id="btnToggleSidebar" class="btn icon" aria-label="Mostrar/ocultar pasos" aria-expanded="false" aria-controls="stepNav" title="Pasos">
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h12v2H3v-2zm0 5h18v2H3v-2z"/></svg>
       </button>
       <h1 id="appTitle" class="app-title" tabindex="0">Dijkstra — Camino Mínimo</h1>
@@ -28,7 +28,7 @@
   <main class="app-main">
     <!-- Sidebar / Wizard -->
     <aside class="sidebar" aria-label="Asistente por pasos">
-      <nav class="steps">
+      <nav id="stepNav" class="steps" aria-label="Pasos del asistente">
         <ol>
           <li class="step is-active" data-step="1"><button type="button" class="step-btn" aria-controls="step1">1. Tamaño y modo</button></li>
           <li class="step" data-step="2"><button type="button" class="step-btn" aria-controls="step2">2. Construcción</button></li>
@@ -64,7 +64,7 @@
           <button id="btnClearGraph" class="btn danger" title="Vaciar grafo">Vaciar</button>
         </div>
 
-        <fieldset class="quick-edge">
+        <fieldset class="quick-edge" aria-describedby="edgeHelp edgeError">
           <legend>Arista rápida</legend>
           <div class="grid-4">
             <label>Desde
@@ -82,6 +82,8 @@
             </label>
           </div>
           <button id="btnQuickAddEdge" class="btn primary">Añadir arista</button>
+          <p id="edgeHelp" class="hint">Introduce IDs existentes en mayúsculas. Pesos permitidos ≥ 0.</p>
+          <p id="edgeError" class="field-error" role="alert" hidden></p>
           <datalist id="nodesList"></datalist>
         </fieldset>
 
@@ -219,9 +221,9 @@
   </main>
 
   <!-- Modales -->
-  <dialog id="modalHelp" class="modal">
+  <dialog id="modalHelp" class="modal" aria-modal="true" aria-labelledby="helpTitle">
     <form method="dialog" class="modal-card card">
-      <header class="card-header"><h3>Ayuda rápida</h3></header>
+      <header class="card-header"><h3 id="helpTitle">Ayuda rápida</h3></header>
       <div class="modal-body">
         <p><strong>Cómo usar:</strong></p>
         <ol>
@@ -237,9 +239,9 @@
     </form>
   </dialog>
 
-  <dialog id="modalEdgeEditor" class="modal">
+  <dialog id="modalEdgeEditor" class="modal" aria-modal="true" aria-labelledby="edgeEditorTitle">
     <form method="dialog" class="modal-card card">
-      <header class="card-header"><h3>Editar arista</h3></header>
+      <header class="card-header"><h3 id="edgeEditorTitle">Editar arista</h3></header>
       <div class="modal-body">
         <div class="grid-3">
           <label>Desde <input id="editFrom" /></label>
@@ -267,8 +269,8 @@
   </dialog>
 
   <!-- Toasts -->
-  <div id="toastArea" class="toasts" aria-live="polite" aria-atomic="true"></div>
+  <div id="toastArea" class="toasts" aria-live="polite" aria-atomic="true" role="status"></div>
 
-  <script src="public/scripts/ui.js" defer></script>
+  <script type="module" src="public/scripts/ui.js"></script>
 </body>
 </html>
