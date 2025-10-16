@@ -1,538 +1,1024 @@
 // /public/scripts/ui.js
 
-// Dijkstra funcional + UI/UX. Oscuro fijo, cuadrícula siempre, sin emojis.
-// Pan/zoom sólo sobre el canvas. Sin dependencias.
+import {
+  Animator,
+  MAX_PATH_COMBINATIONS,
+  addNode,
+  allShortestPaths,
+  createGraph,
+  dijkstra,
+  deleteEdge,
+  edgeKey,
+  normalizeNodeId,
+  upsertEdge,
+  validateEdge,
+  validateNodeCount,
+} from './script.js';
 
-/* ------------------ Helpers ------------------ */
-(() => {
-  const $ = (s, r=document) => r.querySelector(s);
-  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
-  /* ====== Estado global ====== */
-  const state = {
-    addNodeMode: false,
-    zoom: 1,
-    pan: {x:0,y:0},
-    graph: createGraph(),
-    anim: null, // {steps, idx, playing, speed, result}
-    highlightPath: null,
+const state = {
+  addNodeMode: false,
+  zoom: 1,
+  pan: { x: 0, y: 0 },
+  graph: createGraph(),
+  animator: null,
+  highlightPath: null,
+  selectedPath: null,
+  raf: null,
+  lastResult: null,
+  logEntries: [],
+  logRendered: -1,
+  currentStep: 1,
+};
+
+function samePath(a, b) {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  return a.every((node, index) => node === b[index]);
+}
+
+const toastArea = $('#toastArea');
+const sidebar = $('.sidebar');
+const btnToggleSidebar = $('#btnToggleSidebar');
+const btnAddNode = $('#btnAddNode');
+const edgeError = $('#edgeError');
+const edgeFromInput = $('#edgeFrom');
+const edgeToInput = $('#edgeTo');
+const edgeWeightInput = $('#edgeWeight');
+const edgesTableBody = $('#edgesTable tbody');
+const selSource = $('#selSource');
+const selTarget = $('#selTarget');
+const nodesList = $('#nodesList');
+const logStream = $('#logStream');
+const pathCost = $('#pathCost');
+const pathsList = $('#pathsList');
+const liveQueue = $('#liveQueue');
+const liveExtracted = $('#liveExtracted');
+const liveIteration = $('#liveIteration');
+const progress = $('#progress');
+const rangeSpeed = $('#rangeSpeed');
+const btnRun = $('#btnRun');
+const btnPrev = $('#btnPrev');
+const btnNext = $('#btnNext');
+const btnPlay = $('#btnPlay');
+const btnPause = $('#btnPause');
+const btnReplay = $('#btnReplay');
+const canvas = $('#graphCanvas');
+const wrap = $('#canvasWrap');
+const ctx = canvas.getContext('2d');
+const inpN = $('#inpN');
+const nError = $('#nError');
+
+function toast(message, type = 'info', timeout = 2500) {
+  const el = document.createElement('div');
+  el.className = `toast${type === 'success' ? ' toast--success' : ''}${type === 'error' ? ' toast--error' : ''}`;
+  el.textContent = message;
+  toastArea.appendChild(el);
+  while (toastArea.children.length > 4) {
+    toastArea.firstElementChild?.remove();
+  }
+  const duration = type === 'error' ? Math.max(timeout, 3800) : timeout;
+  setTimeout(() => el.remove(), duration);
+}
+
+function setActiveStep(step) {
+  state.currentStep = Number(step);
+  $$('.step').forEach((item) => {
+    const isActive = Number(item.dataset.step) === state.currentStep;
+    item.classList.toggle('is-active', isActive);
+    const button = item.querySelector('.step-btn');
+    if (button) {
+      button.setAttribute('aria-current', isActive ? 'step' : 'false');
+    }
+  });
+  $$('[data-step-panel]').forEach((panel) => {
+    panel.hidden = Number(panel.dataset.stepPanel) !== state.currentStep;
+  });
+}
+
+function scheduleRender() {
+  if (state.raf) return;
+  state.raf = requestAnimationFrame(() => {
+    state.raf = null;
+    renderGraph();
+  });
+}
+
+function renderGraph() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.translate(state.pan.x, state.pan.y);
+  ctx.scale(state.zoom, state.zoom);
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const edge of state.graph.edges.values()) {
+    const fromNode = state.graph.nodes.get(edge.from);
+    const toNode = state.graph.nodes.get(edge.to);
+    if (!fromNode || !toNode) continue;
+
+    ctx.strokeStyle = '#93c5fd';
+    ctx.lineWidth = 2 / state.zoom;
+    ctx.fillStyle = '#e5e7eb';
+
+    ctx.beginPath();
+    ctx.moveTo(fromNode.x, fromNode.y);
+    ctx.lineTo(toNode.x, toNode.y);
+    ctx.stroke();
+
+    const midX = (fromNode.x + toNode.x) / 2;
+    const midY = (fromNode.y + toNode.y) / 2;
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(midX - 12, midY - 20, 24, 14);
+    ctx.strokeStyle = '#334155';
+    ctx.strokeRect(midX - 12, midY - 20, 24, 14);
+    ctx.fillStyle = '#e5e7eb';
+    ctx.font = `${12 / state.zoom}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(edge.weight), midX, midY - 13);
+
+    drawArrow(fromNode, toNode);
+  }
+
+  if (state.highlightPath && state.highlightPath.length > 1) {
+    ctx.strokeStyle = '#22c55e';
+    ctx.lineWidth = 3 / state.zoom;
+    for (let i = 0; i < state.highlightPath.length - 1; i += 1) {
+      const a = state.graph.nodes.get(state.highlightPath[i]);
+      const b = state.graph.nodes.get(state.highlightPath[i + 1]);
+      if (!a || !b) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+  }
+
+  for (const node of state.graph.nodes.values()) {
+    drawNode(node.id, node.x, node.y);
+  }
+}
+
+function drawArrow(from, to) {
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const len = 10 / state.zoom;
+  ctx.beginPath();
+  ctx.moveTo(to.x, to.y);
+  ctx.lineTo(
+    to.x - len * Math.cos(angle - Math.PI / 6),
+    to.y - len * Math.sin(angle - Math.PI / 6),
+  );
+  ctx.moveTo(to.x, to.y);
+  ctx.lineTo(
+    to.x - len * Math.cos(angle + Math.PI / 6),
+    to.y - len * Math.sin(angle + Math.PI / 6),
+  );
+  ctx.stroke();
+}
+
+function drawNode(id, x, y) {
+  ctx.beginPath();
+  ctx.fillStyle = '#0b1220aa';
+  ctx.strokeStyle = '#64748b';
+  ctx.arc(x, y, 18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#e5e7eb';
+  ctx.font = `${14 / state.zoom}px system-ui`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(id, x, y);
+}
+
+function setAddNodeMode(enabled) {
+  state.addNodeMode = enabled;
+  btnAddNode.classList.toggle('is-active', enabled);
+  btnAddNode.setAttribute('aria-pressed', String(enabled));
+}
+
+function resetEdgeFormError() {
+  edgeError.hidden = true;
+  edgeError.textContent = '';
+}
+
+function showEdgeErrors(messages) {
+  edgeError.hidden = false;
+  edgeError.textContent = messages.join(' ');
+}
+
+function nextNodeId() {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (const letter of letters) {
+    if (!state.graph.nodes.has(letter)) return letter;
+  }
+  let idx = 1;
+  while (true) {
+    const id = `N${idx}`;
+    if (!state.graph.nodes.has(id)) return id;
+    idx += 1;
+  }
+}
+
+function screenToWorld(point) {
+  return {
+    x: (point.x - state.pan.x) / state.zoom,
+    y: (point.y - state.pan.y) / state.zoom,
   };
+}
 
-  function createGraph(){
-    return { nodes: new Map(), edges: new Map() };
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function requestGraphReset() {
+  if (state.animator) {
+    state.animator.destroy();
+  }
+  state.animator = null;
+  state.lastResult = null;
+  state.selectedPath = null;
+  state.highlightPath = null;
+  state.logEntries = [];
+  state.logRendered = -1;
+  logStream.innerHTML = '';
+  resetPlayerControls();
+  renderResults(null);
+  updateDistances();
+  liveQueue.textContent = '[]';
+  liveExtracted.textContent = '—';
+  liveIteration.textContent = '0';
+  scheduleRender();
+}
+
+function resetPlayerControls() {
+  btnPlay.disabled = true;
+  btnPrev.disabled = true;
+  btnNext.disabled = true;
+  btnReplay.disabled = true;
+  btnPause.hidden = true;
+  btnPlay.hidden = false;
+  progress.value = '0';
+  progress.max = '0';
+}
+
+function fillNodeSelects() {
+  const options = Array.from(state.graph.nodes.keys()).sort();
+  const render = (value) => options.map((id) => `<option value="${id}">${id}</option>`).join('');
+  const previousSource = selSource.value;
+  const previousTarget = selTarget.value;
+  selSource.innerHTML = '<option value="">—</option>' + render();
+  selTarget.innerHTML = '<option value="">—</option>' + render();
+  selSource.value = options.includes(previousSource) ? previousSource : '';
+  selTarget.value = options.includes(previousTarget) ? previousTarget : '';
+  nodesList.innerHTML = options.map((id) => `<option value="${id}">`).join('');
+}
+
+function refreshEdgesTable() {
+  edgesTableBody.innerHTML = '';
+  for (const edge of state.graph.edges.values()) {
+    const tr = document.createElement('tr');
+    tr.dataset.key = edge.id || edgeKey(edge.from, edge.to);
+    tr.innerHTML = `
+      <td>${edge.from}</td>
+      <td>${edge.to}</td>
+      <td>${edge.weight}</td>
+      <td>
+        <button type="button" class="btn ghost" data-action="edit">Editar</button>
+        <button type="button" class="btn danger" data-action="delete">Borrar</button>
+      </td>`;
+    edgesTableBody.appendChild(tr);
+  }
+}
+
+function describeStep(step) {
+  if (!step) return '';
+  if (step.type === 'init') return 'Inicio: cola inicializada.';
+  if (step.type === 'extract') return `Extraigo ${step.extracted}.`;
+  if (step.type === 'relax-better') {
+    return `Mejora ${step.edge.from}→${step.edge.to} (peso ${step.edge.weight}).`;
+  }
+  if (step.type === 'relax-tie') {
+    return `Empate ${step.edge.from}→${step.edge.to}.`;
+  }
+  return 'Sin mejora.';
+}
+
+function updateLog(index) {
+  if (!state.logEntries.length) return;
+  if (index > state.logRendered) {
+    for (let i = state.logRendered + 1; i <= index; i += 1) {
+      const li = document.createElement('li');
+      li.textContent = state.logEntries[i];
+      logStream.appendChild(li);
+    }
+    state.logRendered = index;
+  }
+  $$('#logStream li').forEach((li, idx) => {
+    li.classList.toggle('is-active', idx === index);
+  });
+  const active = logStream.children[index];
+  active?.scrollIntoView({ block: 'end' });
+}
+
+function updateDistances(step = null) {
+  const tbody = $('#distTable tbody');
+  tbody.innerHTML = '';
+  const dist = step?.dist ?? new Map();
+  const prev = step?.prev ?? new Map();
+  const queue = new Set((step?.queue ?? []).map((item) => item.split('(')[0]));
+  const nodes = Array.from(state.graph.nodes.keys()).sort();
+  nodes.forEach((nodeId) => {
+    const d = dist.get(nodeId);
+    const hasValue = dist.has(nodeId);
+    const prevSet = prev.get(nodeId) ?? new Set();
+    const badge = step?.extracted === nodeId
+      ? '<span class="badge badge--visited">visitado</span>'
+      : (queue.has(nodeId) ? '<span class="badge badge--queue">en cola</span>' : '<span class="badge badge--relax-worse">—</span>');
+    const tr = document.createElement('tr');
+    const prevText = prevSet.size ? Array.from(prevSet).join(', ') : '—';
+    const distText = Number.isFinite(d)
+      ? d
+      : (hasValue ? '∞' : '—');
+    tr.innerHTML = `<td>${nodeId}</td><td>${distText}</td><td>${prevText}</td><td>${badge}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderResults(result) {
+  if (!result) {
+    pathCost.textContent = '—';
+    pathsList.innerHTML = '';
+    state.selectedPath = null;
+    state.highlightPath = null;
+    return;
+  }
+  const { cost, paths } = result;
+  const validPaths = Number.isFinite(cost) ? paths : [];
+  const hasPaths = validPaths.length > 0;
+  pathCost.textContent = hasPaths ? String(cost) : '—';
+  pathsList.innerHTML = '';
+  if (!hasPaths) {
+    const li = document.createElement('li');
+    li.textContent = 'No existe camino.';
+    pathsList.appendChild(li);
+    state.selectedPath = null;
+    state.highlightPath = null;
+    scheduleRender();
+    return;
   }
 
-  /* ====== Toast ====== */
-  const toastArea = $('#toastArea');
-  function toast(msg, type='info', t=2000){
-    const el = document.createElement('div');
-    el.className = `toast ${type==='success'?'toast--success':''} ${type==='error'?'toast--error':''}`;
-    el.textContent = msg;
-    toastArea.appendChild(el);
-    setTimeout(()=>el.remove(), t);
+  const activeIndexCandidate = state.selectedPath
+    ? validPaths.findIndex((candidate) => samePath(candidate, state.selectedPath))
+    : 0;
+  const activeIndex = activeIndexCandidate >= 0 ? activeIndexCandidate : 0;
+
+  validPaths.slice(0, MAX_PATH_COMBINATIONS).forEach((path, index) => {
+    const li = document.createElement('li');
+    const checked = index === activeIndex;
+    li.innerHTML = `
+      <label>
+        <input type="radio" name="path" value="${index}" ${checked ? 'checked' : ''} />
+        ${path.join('–')} <span class="badge">costo ${cost}</span>
+      </label>`;
+    if (checked) li.classList.add('is-active');
+    pathsList.appendChild(li);
+  });
+
+  if (validPaths.length >= MAX_PATH_COMBINATIONS) {
+    const warning = document.createElement('li');
+    warning.innerHTML = `<span class="hint">Mostrando hasta ${MAX_PATH_COMBINATIONS} caminos.</span>`;
+    pathsList.appendChild(warning);
   }
 
-  /* ====== Steps ====== */
-  function setActiveStep(n){
-    $$('.step').forEach(li => li.classList.toggle('is-active', li.dataset.step === String(n)));
-    $$('[data-step-panel]').forEach(p => p.hidden = p.dataset.stepPanel !== String(n));
+  state.selectedPath = validPaths[activeIndex];
+  const atLastStep = state.animator && state.animator.position === state.animator.length - 1;
+  state.highlightPath = atLastStep ? state.selectedPath : null;
+  scheduleRender();
+}
+
+function updateSelectedPath(index) {
+  if (!state.lastResult || !state.lastResult.paths) return;
+  const idx = Number(index);
+  const path = state.lastResult.paths[idx];
+  if (!path) return;
+  state.selectedPath = path;
+  const atLastStep = !state.animator || state.animator.position === state.animator.length - 1;
+  state.highlightPath = atLastStep ? path : state.highlightPath;
+  $$('#pathsList li').forEach((li) => li.classList.remove('is-active'));
+  const targetLi = pathsList.querySelector(`input[value="${idx}"]`)?.closest('li');
+  targetLi?.classList.add('is-active');
+  scheduleRender();
+  toast('Camino resaltado.', 'success', 2000);
+}
+
+function configureAnimator(result) {
+  if (state.animator) {
+    state.animator.destroy();
   }
+  state.animator = new Animator(result.steps, (step, index) => {
+    updateLog(index);
+    updateDistances(step);
+    liveIteration.textContent = String(index);
+    liveExtracted.textContent = step?.extracted ?? '—';
+    liveQueue.textContent = `[${(step?.queue ?? []).join(', ')}]`;
+    const lastIndex = state.animator.length - 1;
+    progress.value = String(index);
+    btnPrev.disabled = index <= 0;
+    btnNext.disabled = index >= lastIndex;
+    state.highlightPath = index === lastIndex ? state.selectedPath : null;
+    scheduleRender();
+  });
+  state.animator.setSpeed(Number(rangeSpeed.value));
+  state.animator.pause();
+  btnPlay.disabled = result.steps.length <= 1;
+  btnPrev.disabled = true;
+  btnNext.disabled = result.steps.length <= 1;
+  btnReplay.disabled = result.steps.length === 0;
+  btnPause.hidden = true;
+  btnPlay.hidden = false;
+  progress.max = String(Math.max(0, result.steps.length - 1));
+  progress.value = '0';
+  state.animator.seek(0);
+}
 
-  /* ====== Sidebar/UI básicos ====== */
-  $('#btnHelp').addEventListener('click', ()=> $('#modalHelp').showModal());
-  $('#btnReset').addEventListener('click', ()=> location.reload());
-  $('#btnToggleSidebar').addEventListener('click', ()=> $('.sidebar').classList.toggle('is-open'));
-  $$('.step .step-btn').forEach(btn => btn.addEventListener('click', () => setActiveStep(btn.parentElement.dataset.step)));
+function validateNodeInput() {
+  const value = Number(inpN.value);
+  const validation = validateNodeCount(value);
+  if (!validation.ok) {
+    inpN.classList.add('is-invalid');
+    nError.hidden = false;
+    nError.textContent = validation.message;
+    return false;
+  }
+  inpN.classList.remove('is-invalid');
+  nError.hidden = true;
+  return true;
+}
 
-  /* ====== Selects y tabla ====== */
-  function fillNodeSelects(){
-    const opts = Array.from(state.graph.nodes.keys());
-    const selSource = $('#selSource');
-    const selTarget = $('#selTarget');
-    [selSource, selTarget].forEach(sel=>{
-      sel.innerHTML = '<option value="">—</option>' + opts.map(o=>`<option>${o}</option>`).join('');
+function generateRandomGraph(n) {
+  state.graph = createGraph();
+  const radius = 260;
+  const cx = 520;
+  const cy = 380;
+  for (let i = 0; i < n; i += 1) {
+    const id = String.fromCharCode(65 + i);
+    const angle = (i / n) * Math.PI * 2;
+    addNode(state.graph, {
+      id,
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
     });
-    const dl = $('#nodesList'); dl.innerHTML = opts.map(o=>`<option value="${o}">`).join('');
   }
-  function refreshEdgesTable(){
-    const tbody = $('#edgesTable tbody');
-    tbody.innerHTML = '';
-    for (const e of state.graph.edges.values()){
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${e.from}</td><td>${e.to}</td><td>${e.weight}</td>
-        <td><button class="btn ghost btn-edit-edge">Editar</button>
-            <button class="btn danger btn-del-edge">Borrar</button></td>`;
-      tbody.appendChild(tr);
+
+  const ids = Array.from(state.graph.nodes.keys());
+  for (const id of ids) {
+    const targets = ids.filter((node) => node !== id);
+    targets.sort(() => Math.random() - 0.5);
+    const desired = Math.min(3, 2 + Math.floor(Math.random() * 2));
+    for (let i = 0; i < desired && i < targets.length; i += 1) {
+      const to = targets[i];
+      const weight = 1 + Math.floor(Math.random() * 9);
+      upsertEdge(state.graph, { from: id, to, weight, id: edgeKey(id, to) });
     }
   }
 
-  /* ====== Canvas y render ====== */
-  const canvas = $('#graphCanvas');
-  const wrap = $('#canvasWrap');
-  const ctx = canvas.getContext('2d');
+  requestGraphReset();
+  fillNodeSelects();
+  refreshEdgesTable();
+  scheduleRender();
+}
 
-  function worldToScreen(p){ return { x: p.x*state.zoom + state.pan.x, y: p.y*state.zoom + state.pan.y }; }
-  function screenToWorld(p){ return { x: (p.x - state.pan.x) / state.zoom, y: (p.y - state.pan.y) / state.zoom }; }
-  function clamp(v,min,max){ return Math.max(min, Math.min(max,v)); }
+function applySampleGraph() {
+  state.graph = createGraph();
+  const positions = {
+    A: { x: 320, y: 320 },
+    B: { x: 520, y: 220 },
+    C: { x: 720, y: 320 },
+    D: { x: 620, y: 520 },
+    E: { x: 420, y: 520 },
+  };
+  Object.entries(positions).forEach(([id, point]) => {
+    addNode(state.graph, { id, ...point });
+  });
+  const edges = [
+    ['A', 'B', 3],
+    ['A', 'C', 2],
+    ['B', 'D', 5],
+    ['C', 'D', 4],
+    ['C', 'E', 1],
+    ['E', 'D', 1],
+  ];
+  edges.forEach(([from, to, weight]) => {
+    upsertEdge(state.graph, { from, to, weight, id: edgeKey(from, to) });
+  });
+  requestGraphReset();
+  fillNodeSelects();
+  refreshEdgesTable();
+  selSource.value = 'A';
+  selTarget.value = 'D';
+  scheduleRender();
+}
 
-  function redraw(){
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.translate(state.pan.x, state.pan.y);
-    ctx.scale(state.zoom, state.zoom);
+function runAlgorithm(source, target) {
+  if (state.animator) {
+    state.animator.destroy();
+    state.animator = null;
+  }
+  state.highlightPath = null;
+  const { steps, dist, prev } = dijkstra(state.graph, source, target);
+  const cost = dist.get(target);
+  const paths = Number.isFinite(cost) ? allShortestPaths(prev, source, target) : [];
+  state.lastResult = { steps, dist, prev, cost, paths };
+  state.logEntries = steps.map(describeStep);
+  state.logRendered = -1;
+  logStream.innerHTML = '';
+  renderResults(state.lastResult);
+  configureAnimator(state.lastResult);
+  updateLog(0);
+  updateDistances(steps[0] ?? { dist, prev, queue: [], extracted: null });
+  toast('Listo. Usa Reproducir o flechas.', 'success');
+}
 
-    // edges
-    ctx.lineWidth = 2/state.zoom;
-    for (const e of state.graph.edges.values()){
-      const u = state.graph.nodes.get(e.from), v = state.graph.nodes.get(e.to);
-      if(!u||!v) continue;
-      ctx.strokeStyle = '#93c5fd';
-      ctx.fillStyle = '#e5e7eb';
-      ctx.beginPath(); ctx.moveTo(u.x,u.y); ctx.lineTo(v.x,v.y); ctx.stroke();
-      const mx = (u.x+v.x)/2, my = (u.y+v.y)/2;
-      ctx.fillStyle = '#0b1220';
-      ctx.fillRect(mx-12,my-20,24,14);
-      ctx.strokeStyle = '#334155';
-      ctx.strokeRect(mx-12,my-20,24,14);
-      ctx.fillStyle = '#e5e7eb';
-      ctx.font = `${12/state.zoom}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(String(e.weight), mx, my-13);
-      drawArrow(u,v);
-    }
-    // path highlight
-    if (state.highlightPath && state.highlightPath.length>1){
-      ctx.strokeStyle = '#22c55e';
-      ctx.lineWidth = 3/state.zoom;
-      for (let i=0;i<state.highlightPath.length-1;i++){
-        const a = state.graph.nodes.get(state.highlightPath[i]);
-        const b = state.graph.nodes.get(state.highlightPath[i+1]);
-        if(!a||!b) continue;
-        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+function ensureGraphReadyForRun(source, target) {
+  if (!source || !target) {
+    toast('Selecciona origen y destino.', 'error');
+    return false;
+  }
+  if (source === target) {
+    toast('Origen y destino deben ser distintos.', 'error');
+    return false;
+  }
+  if (!state.graph.nodes.has(source) || !state.graph.nodes.has(target)) {
+    toast('Nodos seleccionados inválidos.', 'error');
+    return false;
+  }
+  if (state.graph.edges.size === 0) {
+    toast('Añade aristas antes de ejecutar.', 'error');
+    return false;
+  }
+  return true;
+}
+
+function centerView() {
+  state.zoom = 1;
+  state.pan = { x: 0, y: 0 };
+  scheduleRender();
+}
+
+function zoomBy(factor) {
+  const rect = wrap.getBoundingClientRect();
+  const mx = rect.width / 2;
+  const my = rect.height / 2;
+  const before = screenToWorld({ x: mx, y: my });
+  state.zoom = clamp(state.zoom * factor, 0.4, 3);
+  const after = screenToWorld({ x: mx, y: my });
+  state.pan.x += (after.x - before.x) * state.zoom;
+  state.pan.y += (after.y - before.y) * state.zoom;
+  scheduleRender();
+}
+
+function exportPNG() {
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = 'grafo.png';
+  link.click();
+  toast('PNG exportado.', 'success');
+}
+
+function resetQuickEdgeForm() {
+  edgeFromInput.value = '';
+  edgeToInput.value = '';
+  edgeWeightInput.value = '';
+}
+
+function initTabs() {
+  const tabs = $$('#panelTabs [role="tab"]');
+  const activate = (idx) => {
+    tabs.forEach((tab, index) => {
+      const active = index === idx;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
+      const target = $('#' + tab.getAttribute('aria-controls'));
+      if (target) target.hidden = !active;
+    });
+    tabs[idx].focus();
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => activate(index));
+    tab.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        activate((index + 1) % tabs.length);
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        activate((index - 1 + tabs.length) % tabs.length);
+      }
+      if (event.key === 'Home') {
+        event.preventDefault();
+        activate(0);
+      }
+      if (event.key === 'End') {
+        event.preventDefault();
+        activate(tabs.length - 1);
+      }
+    });
+  });
+}
+
+function initInspectorDemo() {
+  $('#btnInspectorSelect').addEventListener('click', () => {
+    $('#inspectorElement').value = 'Nodo A';
+    $('#inspectorWeight').value = '—';
+    toast('Inspector actualizado.', 'success', 1800);
+  });
+  $('#btnInspectorEdit').addEventListener('click', () => $('#modalEdgeEditor').showModal());
+  $('#btnInspectorDelete').addEventListener('click', () => $('#modalConfirm').showModal());
+}
+
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (event) => {
+    if (event.altKey) {
+      const step = Number(event.key);
+      if (step >= 1 && step <= 4) {
+        event.preventDefault();
+        setActiveStep(step);
       }
     }
-    // nodes
-    for (const n of state.graph.nodes.values()) drawNode(n.id, n.x, n.y);
-  }
-
-  function drawArrow(u,v){
-    const angle = Math.atan2(v.y-u.y, v.x-u.x);
-    const len = 10/state.zoom, x=v.x, y=v.y;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x - len*Math.cos(angle - Math.PI/6), y - len*Math.sin(angle - Math.PI/6));
-    ctx.moveTo(x, y);
-    ctx.lineTo(x - len*Math.cos(angle + Math.PI/6), y - len*Math.sin(angle + Math.PI/6));
-    ctx.stroke();
-  }
-  function drawNode(id,x,y){
-    ctx.beginPath(); ctx.fillStyle = '#0b1220aa'; ctx.strokeStyle = '#64748b';
-    ctx.arc(x,y,18,0,Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#e5e7eb'; ctx.font = `${14/state.zoom}px system-ui`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(id,x,y);
-  }
-
-  // Pan y zoom sólo en canvas
-  let dragging=false, last={x:0,y:0};
-  wrap.addEventListener('mousedown', e => { dragging = true; last={x:e.offsetX,y:e.offsetY}; });
-  window.addEventListener('mouseup', ()=> dragging=false);
-  wrap.addEventListener('mousemove', e => {
-    if (dragging){
-      state.pan.x += e.offsetX - last.x;
-      state.pan.y += e.offsetY - last.y;
-      last = {x:e.offsetX,y:e.offsetY};
-      redraw();
+    if (event.key === ' ' && !event.target.matches('input,textarea')) {
+      if (btnPlay.disabled) return;
+      event.preventDefault();
+      if (btnPlay.hidden) {
+        btnPause.click();
+      } else {
+        btnPlay.click();
+      }
+    }
+    if (event.key === 'ArrowRight' && !event.target.matches('input[type="range"]')) {
+      if (!btnNext.disabled) btnNext.click();
+    }
+    if (event.key === 'ArrowLeft' && !event.target.matches('input[type="range"]')) {
+      if (!btnPrev.disabled) btnPrev.click();
     }
   });
-  wrap.addEventListener('wheel', e => {
-    if (e.ctrlKey){
-      e.preventDefault();
-      const scale = Math.exp(-e.deltaY * 0.0015);
-      const mx = e.offsetX, my = e.offsetY;
-      const before = screenToWorld({x:mx,y:my});
-      state.zoom = clamp(state.zoom*scale, 0.4, 3);
-      const after = screenToWorld({x:mx,y:my});
-      state.pan.x += (after.x - before.x) * state.zoom;
-      state.pan.y += (after.y - before.y) * state.zoom;
-      redraw();
-    }
-  }, {passive:false});
+}
 
-  $('#btnZoomIn').addEventListener('click', ()=> zoomBy(1.15));
-  $('#btnZoomOut').addEventListener('click', ()=> zoomBy(1/1.15));
-  $('#btnCenter').addEventListener('click', ()=> { state.zoom=1; state.pan={x:0,y:0}; redraw(); });
-
-  function zoomBy(f){
-    const rect = wrap.getBoundingClientRect();
-    const mx = rect.width/2, my = rect.height/2;
-    const before = screenToWorld({x:mx,y:my});
-    state.zoom = clamp(state.zoom*f, 0.4, 3);
-    const after = screenToWorld({x:mx,y:my});
-    state.pan.x += (after.x - before.x) * state.zoom;
-    state.pan.y += (after.y - before.y) * state.zoom;
-    redraw();
-  }
-
-  $('#btnScreenshot').addEventListener('click', exportPNG);
-  $('#btnExportPNG').addEventListener('click', exportPNG);
-  function exportPNG(){
-    const a = document.createElement('a');
-    a.href = canvas.toDataURL('image/png'); a.download = 'grafo.png'; a.click();
-    toast('PNG exportado.', 'success');
-  }
-
-  /* ====== Edición del grafo ====== */
-  const nameSeq = () => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    for (let i=0;i<letters.length;i++){ const id = letters[i]; if(!state.graph.nodes.has(id)) return id; }
-    let idx=0; while(true){ const id='N'+(++idx); if(!state.graph.nodes.has(id)) return id; }
-  };
-
-  $('#btnAddNode').addEventListener('click', ()=>{
-    state.addNodeMode = !state.addNodeMode;
-    toast(state.addNodeMode ? 'Modo añadir nodo: haz clic en el lienzo.' : 'Modo añadir nodo desactivado.', 'success');
+function initSidebarToggle() {
+  btnToggleSidebar.setAttribute('aria-expanded', 'false');
+  btnToggleSidebar.addEventListener('click', () => {
+    const isOpen = sidebar.classList.toggle('is-open');
+    btnToggleSidebar.setAttribute('aria-expanded', String(isOpen));
   });
-  wrap.addEventListener('click', (e)=>{
-    if(!state.addNodeMode) return;
-    const pt = screenToWorld({x:e.offsetX, y:e.offsetY});
-    const id = nameSeq();
-    state.graph.nodes.set(id, {id, x: pt.x, y: pt.y});
-    state.addNodeMode = false;
-    fillNodeSelects(); redraw(); toast(`Nodo ${id} añadido.`, 'success');
-  });
-
-  $('#btnQuickAddEdge').addEventListener('click', ()=>{
-    const from = ($('#edgeFrom').value||'').trim().toUpperCase();
-    const to = ($('#edgeTo').value||'').trim().toUpperCase();
-    const w = Math.max(0, Number($('#edgeWeight').value||''));
-    if(!state.graph.nodes.has(from) || !state.graph.nodes.has(to)) return toast('Nodos inválidos.', 'error');
-    if(!(w>=0)) return toast('Peso inválido (≥ 0).', 'error');
-    state.graph.edges.set(`${from}->${to}`, {from,to,weight:w});
-    refreshEdgesTable(); redraw(); toast('Arista añadida.', 'success');
-  });
-  $('#btnAddEdge').addEventListener('click', ()=> toast('Usa el formulario "Arista rápida".', 'success'));
-
-  $('#edgesTable tbody').addEventListener('click', (e)=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    const row = e.target.closest('tr'); const [from,to,w] = $$('td',row).map(td=>td.textContent);
-    if(btn.classList.contains('btn-edit-edge')){
-      $('#editFrom').value = from; $('#editTo').value = to; $('#editWeight').value = w;
-      $('#modalEdgeEditor').showModal();
-      $('#modalEdgeEditor').addEventListener('close', ()=>{
-        if($('#modalEdgeEditor').returnValue==='save'){
-          const nf = $('#editFrom').value.trim().toUpperCase();
-          const nt = $('#editTo').value.trim().toUpperCase();
-          const nw = Math.max(0, Number($('#editWeight').value||0));
-          state.graph.edges.delete(`${from}->${to}`);
-          state.graph.edges.set(`${nf}->${nt}`, {from:nf,to:nt,weight:nw});
-          refreshEdgesTable(); redraw(); toast('Arista actualizada.', 'success');
-        }
-      }, {once:true});
-    }
-    if(btn.classList.contains('btn-del-edge')){
-      $('#modalConfirm').showModal();
-      $('#modalConfirm').addEventListener('close', ()=>{
-        if($('#modalConfirm').returnValue==='confirm'){
-          state.graph.edges.delete(`${from}->${to}`);
-          refreshEdgesTable(); redraw(); toast('Arista eliminada.', 'success');
-        }
-      }, {once:true});
+  const mql = window.matchMedia('(min-width:641px)');
+  mql.addEventListener('change', () => {
+    if (mql.matches) {
+      sidebar.classList.remove('is-open');
+      btnToggleSidebar.setAttribute('aria-expanded', 'false');
     }
   });
+}
 
-  $('#btnAutoComplete').addEventListener('click', ()=>{
-    if(state.graph.nodes.size < 8){
-      const R = 220, cx=450, cy=350;
-      'ABCDEFGH'.split('').forEach((id,i)=>{
-        if(!state.graph.nodes.has(id)){
-          const a = (i/8)*Math.PI*2;
-          state.graph.nodes.set(id, {id, x: cx+R*Math.cos(a), y: cy+R*Math.sin(a)});
-        }
-      });
-    }
-    const add = (u,v,w)=> state.graph.edges.set(`${u}->${v}`, {from:u,to:v,weight:w});
-    add('A','B',3); add('A','C',2); add('B','D',5); add('C','D',4); add('C','E',1); add('E','D',1);
-    fillNodeSelects(); refreshEdgesTable(); redraw();
-    toast('Ejemplo autocompletado.', 'success');
-  });
-
-  $('#btnClearGraph').addEventListener('click', ()=>{
-    state.graph = createGraph(); state.highlightPath=null;
-    fillNodeSelects(); refreshEdgesTable(); redraw(); toast('Grafo limpiado.', 'success');
-  });
-
-  /* ====== Paso 1: validación/modos ====== */
-  const inpN = $('#inpN'), nError = $('#nError');
-  function validateN(){ const v=Number(inpN.value); const ok=v>=8 && v<=16; inpN.classList.toggle('is-invalid', !ok); nError.hidden=ok; return ok; }
-  inpN.addEventListener('input', validateN);
-
-  $('#btnGenRandom').addEventListener('click', ()=>{
-    if(!validateN()) return toast('El número de nodos debe estar entre 8 y 16.', 'error');
-    generateRandomGraph(Number(inpN.value)); $('#modeBadge').textContent='modo: aleatorio';
-    setActiveStep(2); toast('Grafo aleatorio listo.', 'success');
-  });
-  $('#btnGenManual').addEventListener('click', ()=>{
-    if(!validateN()) return toast('El número de nodos debe estar entre 8 y 16.', 'error');
-    state.graph = createGraph();
-    $('#modeBadge').textContent='modo: manual';
-    fillNodeSelects(); refreshEdgesTable(); redraw();
-    setActiveStep(2); toast('Añade nodos con “Añadir nodo”.', 'success');
-  });
-  $('#btnLoadSample').addEventListener('click', ()=>{
-    inpN.value=8; validateN(); $('#btnAutoComplete').click(); setActiveStep(2);
-    $('#modeBadge').textContent='modo: ejemplo'; $('#selSource').value='A'; $('#selTarget').value='D';
+function bindEvents() {
+  $('#btnHelp').addEventListener('click', () => $('#modalHelp').showModal());
+  $('#btnReset').addEventListener('click', () => window.location.reload());
+  $('#btnLoadSample').addEventListener('click', () => {
+    inpN.value = '8';
+    validateNodeInput();
+    applySampleGraph();
+    $('#modeBadge').textContent = 'modo: ejemplo';
+    setActiveStep(2);
     toast('Ejemplo cargado.', 'success');
   });
 
-  /* ====== Random ====== */
-  function generateRandomGraph(n){
-    state.graph = createGraph();
-    const R = 260, cx=520, cy=380;
-    for(let i=0;i<n;i++){
-      const id = String.fromCharCode(65+i);
-      const a = (i/n)*Math.PI*2;
-      state.graph.nodes.set(id, {id, x: cx+R*Math.cos(a), y: cy+R*Math.sin(a)});
+  btnAddNode.addEventListener('click', () => {
+    const enabled = !state.addNodeMode;
+    setAddNodeMode(enabled);
+    toast(enabled ? 'Modo añadir nodo: haz clic en el lienzo.' : 'Modo añadir nodo desactivado.', 'info');
+  });
+
+  $('#btnAddEdge').addEventListener('click', () => toast('Usa el formulario "Arista rápida".', 'info'));
+
+  $('#btnQuickAddEdge').addEventListener('click', () => {
+    resetEdgeFormError();
+    const from = normalizeNodeId(edgeFromInput.value);
+    const to = normalizeNodeId(edgeToInput.value);
+    const weight = edgeWeightInput.value === '' ? NaN : Number(edgeWeightInput.value);
+    const validation = validateEdge({ from, to, weight }, state.graph);
+    if (!validation.ok) {
+      showEdgeErrors(validation.errors);
+      toast(validation.errors[0], 'error');
+      return;
     }
-    const ids = Array.from(state.graph.nodes.keys());
-    for(let i=0;i<n;i++){
-      const u = ids[i];
-      const out = 2 + Math.floor(Math.random()*2);
-      for(let k=1;k<=out;k++){
-        const v = ids[(i+k)%n];
-        const w = 1 + Math.floor(Math.random()*9);
-        state.graph.edges.set(`${u}->${v}`, {from:u,to:v,weight:w});
-      }
+    upsertEdge(state.graph, { from, to, weight, id: edgeKey(from, to) });
+    refreshEdgesTable();
+    requestGraphReset();
+    scheduleRender();
+    resetEdgeFormError();
+    resetQuickEdgeForm();
+    toast('Arista añadida.', 'success');
+  });
+
+  edgesTableBody.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const row = button.closest('tr');
+    if (!row) return;
+    const key = row.dataset.key;
+    const edge = key ? state.graph.edges.get(key) : null;
+    if (!edge) {
+      toast('Arista no encontrada.', 'error');
+      return;
     }
-    fillNodeSelects(); refreshEdgesTable(); redraw();
-  }
-
-  /* ====== Dijkstra ====== */
-  function runDijkstra(source, target){
-    const nodes = Array.from(state.graph.nodes.keys());
-    const dist = new Map(nodes.map(id=>[id, Infinity]));
-    const prev = new Map(nodes.map(id=>[id, null]));
-    const visited = new Set();
-    const steps = [];
-    const pq = [];
-
-    const pushPQ = (d,u)=>{ pq.push([d,u]); pq.sort((a,b)=>a[0]-b[0]); };
-    const snapshotPQ = ()=> pq.slice().map(([d,u])=>`${u}(${d})`);
-
-    dist.set(source, 0); pushPQ(0, source);
-    steps.push({type:'init', queue:snapshotPQ(), extracted:null, dist:new Map(dist), prev:new Map(prev)});
-
-    while(pq.length){
-      const [du, u] = pq.shift();
-      if(visited.has(u)) continue;
-      visited.add(u);
-      steps.push({type:'extract', queue:snapshotPQ(), extracted:u, dist:new Map(dist), prev:new Map(prev)});
-      if(u===target) break;
-
-      for (const e of outgoing(u)){
-        const alt = du + e.weight;
-        const dv = dist.get(e.to);
-        let type='relax-none';
-        if (alt < dv){
-          dist.set(e.to, alt); prev.set(e.to, u);
-          pushPQ(alt, e.to); type='relax-better';
-        } else if (alt === dv){
-          type='relax-tie';
+    if (button.dataset.action === 'edit') {
+      $('#editFrom').value = edge.from;
+      $('#editTo').value = edge.to;
+      $('#editWeight').value = String(edge.weight);
+      const modal = $('#modalEdgeEditor');
+      modal.showModal();
+      modal.addEventListener('close', () => {
+        if (modal.returnValue === 'save') {
+          const newFrom = normalizeNodeId($('#editFrom').value);
+          const newTo = normalizeNodeId($('#editTo').value);
+          const newWeightRaw = $('#editWeight').value;
+          const newWeight = newWeightRaw === '' ? NaN : Number(newWeightRaw);
+          const validation = validateEdge(
+            { from: newFrom, to: newTo, weight: newWeight },
+            state.graph,
+            { allowExisting: edgeKey(newFrom, newTo) === edgeKey(edge.from, edge.to) },
+          );
+          if (!validation.ok) {
+            toast(validation.errors[0], 'error');
+            return;
+          }
+          deleteEdge(state.graph, edge.from, edge.to);
+          upsertEdge(state.graph, { from: newFrom, to: newTo, weight: newWeight, id: edgeKey(newFrom, newTo) });
+          refreshEdgesTable();
+          requestGraphReset();
+          scheduleRender();
+          toast('Arista actualizada.', 'success');
         }
-        steps.push({type, edge:e, queue:snapshotPQ(), extracted:u, dist:new Map(dist), prev:new Map(prev)});
-      }
+      }, { once: true });
     }
-    const path = rebuildPath(prev, target);
-    return {steps, dist, prev, path};
-  }
-  function outgoing(u){ return Array.from(state.graph.edges.values()).filter(e=>e.from===u); }
-  function rebuildPath(prev, t){ const path=[]; let cur=t; while(cur){ path.unshift(cur); cur = prev.get(cur); } return path; }
-
-  /* ====== Animación ====== */
-  const btnRun = $('#btnRun'), btnPlay=$('#btnPlay'), btnPause=$('#btnPause');
-  const btnPrev=$('#btnPrev'), btnNext=$('#btnNext'), btnReplay=$('#btnReplay');
-  const progress=$('#progress'), liveQueue=$('#liveQueue'), liveExtracted=$('#liveExtracted'), liveIteration=$('#liveIteration');
-  let playTimer=null;
-
-  $('#btnRun').addEventListener('click', ()=>{
-    const s = $('#selSource').value, t = $('#selTarget').value;
-    if(!s || !t || s===t) return toast('Seleccione origen y destino distintos.', 'error');
-    const res = runDijkstra(s,t);
-    state.anim = {steps: res.steps, idx:0, playing:false, speed:1, result:res};
-    progress.max = String(Math.max(0, res.steps.length-1));
-    updateByStep(0);
-    [btnPlay, btnPrev, btnNext, btnReplay].forEach(b=> b.disabled=false);
-    toast('Listo. Usa Reproducir o flechas.', 'success');
-    updateDistances(res.steps.at(-1));
-    renderResults(res);
-    setActiveStep(3);
+    if (button.dataset.action === 'delete') {
+      const modal = $('#modalConfirm');
+      modal.showModal();
+      modal.addEventListener('close', () => {
+        if (modal.returnValue === 'confirm') {
+          deleteEdge(state.graph, edge.from, edge.to);
+          refreshEdgesTable();
+          requestGraphReset();
+          scheduleRender();
+          toast('Arista eliminada.', 'success');
+        }
+      }, { once: true });
+    }
   });
 
-  $('#rangeSpeed').addEventListener('input', (e)=> { if(state.anim) state.anim.speed = Number(e.target.value); });
-
-  btnPlay.addEventListener('click', ()=> setPlayState(true));
-  btnPause.addEventListener('click', ()=> setPlayState(false));
-  btnReplay.addEventListener('click', ()=> { if(!state.anim) return; gotoStep(0); });
-  btnNext.addEventListener('click', ()=> stepDelta(1));
-  btnPrev.addEventListener('click', ()=> stepDelta(-1));
-  progress.addEventListener('input', (e)=>{ if(state.anim) gotoStep(Number(e.target.value)); });
-
-  function setPlayState(on){
-    if(!state.anim) return;
-    state.anim.playing = on;
-    btnPlay.hidden = on; btnPause.hidden = !on;
-    clearInterval(playTimer);
-    if(on){
-      playTimer = setInterval(()=>{
-        if(state.anim.idx >= state.anim.steps.length-1){ setPlayState(false); return; }
-        stepDelta(1);
-      }, 700 / (state.anim.speed||1));
+  $('#btnAutoComplete').addEventListener('click', () => {
+    if (state.graph.nodes.size < 8) {
+      const radius = 220;
+      const cx = 450;
+      const cy = 350;
+      'ABCDEFGH'.split('').forEach((id, index) => {
+        if (!state.graph.nodes.has(id)) {
+          const angle = (index / 8) * Math.PI * 2;
+          addNode(state.graph, { id, x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+        }
+      });
     }
-  }
-  function stepDelta(d){ if(!state.anim) return; gotoStep(clamp(state.anim.idx + d, 0, state.anim.steps.length-1)); }
-  function gotoStep(i){ state.anim.idx = i; progress.value = String(i); updateByStep(i); }
-
-  function updateByStep(i){
-    const st = state.anim.steps[i];
-    liveIteration.textContent = String(i);
-    liveExtracted.textContent = st.extracted ?? '—';
-    liveQueue.textContent = `[${(st.queue||[]).join(', ')}]`;
-    addLog(describeStep(st));
-    updateDistances(st);
-    if(i===state.anim.steps.length-1){ state.highlightPath = state.anim.result.path; }
-    redraw();
-  }
-  function describeStep(st){
-    if(st.type==='init') return 'Inicio: cola inicializada.';
-    if(st.type==='extract') return `Extraigo ${st.extracted}.`;
-    if(st.type==='relax-better') return `Mejora: ${st.edge.from}→${st.edge.to} = ${st.edge.weight}.`;
-    if(st.type==='relax-tie') return `Empate: ${st.edge.from}→${st.edge.to} mantiene distancia.`;
-    return 'Sin mejora.';
-  }
-  function addLog(text){ const li=document.createElement('li'); li.textContent=text; $('#logStream').appendChild(li); li.scrollIntoView({block:'end'}); }
-
-  function updateDistances(st){
-    const tbody = $('#distTable tbody'); tbody.innerHTML='';
-    const dist = st.dist || new Map(); const prev = st.prev || new Map();
-    const nodes = Array.from(state.graph.nodes.keys()).sort();
-    nodes.forEach(n=>{
-      const d = dist.get(n); const p = prev.get(n);
-      const badge = st.extracted===n ? '<span class="badge badge--visited">visitado</span>'
-                 : (String(st.queue||[]).includes(n+'(') ? '<span class="badge badge--queue">en cola</span>' : '<span class="badge badge--relax-worse">—</span>');
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${n}</td><td>${Number.isFinite(d)?d:'∞'}</td><td>${p??'—'}</td><td>${badge}</td>`;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function renderResults(res){
-    const cost = res.dist.get($('#selTarget').value);
-    $('#pathCost').textContent = Number.isFinite(cost) ? String(cost) : '—';
-    const ul = $('#pathsList'); ul.innerHTML='';
-    const best = res.path;
-    if(best.length){
-      const li = document.createElement('li'); li.className='is-active';
-      li.innerHTML = `<label><input type="radio" name="path" checked /> ${best.join('–')} <span class="badge">costo ${cost}</span></label>`;
-      ul.appendChild(li);
-      state.highlightPath = best;
-    }else{
-      ul.innerHTML = '<li>No existe camino.</li>'; state.highlightPath = null;
-    }
-    const approxAlt = computeSecondBest($('#selSource').value, $('#selTarget').value, best);
-    if(approxAlt){
-      const li2=document.createElement('li');
-      li2.innerHTML = `<label><input type="radio" name="path" /> ${approxAlt.path.join('–')} <span class="badge badge--muted">costo ${approxAlt.cost} (no mínimo)</span></label>`;
-      ul.appendChild(li2);
-    }
-    ul.addEventListener('change', (e)=>{
-      if(e.target.name==='path'){
-        $$('#pathsList li').forEach(li=>li.classList.remove('is-active'));
-        const li = e.target.closest('li'); li.classList.add('is-active');
-        const text = e.target.closest('label').textContent;
-        const path = text.split('costo')[0].trim().split('–').filter(Boolean);
-        state.highlightPath = path; redraw(); toast('Camino resaltado.', 'success');
-      }
-    }, {once:true});
-  }
-  function computeSecondBest(s,t,bestPath){
-    if(!bestPath || bestPath.length<2) return null;
-    let altBest=null;
-    for(let i=0;i<bestPath.length-1;i++){
-      const u=bestPath[i], v=bestPath[i+1];
-      const key=`${u}->${v}`;
-      const removed = state.graph.edges.get(key);
-      if(!removed) continue;
-      state.graph.edges.delete(key);
-      const res = runDijkstra(s,t);
-      if(res.path.length){
-        const cost = res.dist.get(t);
-        if(!altBest || cost < altBest.cost) altBest = {path: res.path, cost};
-      }
-      state.graph.edges.set(key, removed);
-    }
-    return altBest;
-  }
-
-  /* ====== Tabs accesibles ====== */
-  const tabs = $$('#panelTabs [role="tab"]');
-  function activateTab(idx){
-    tabs.forEach((t,i)=>{
-      const active = i===idx;
-      t.classList.toggle('is-active', active);
-      t.setAttribute('aria-selected', String(active));
-      t.tabIndex = active?0:-1;
-      $('#'+t.getAttribute('aria-controls')).hidden = !active;
-    });
-    tabs[idx].focus();
-  }
-  tabs.forEach((t,i)=>{
-    t.addEventListener('click', ()=>activateTab(i));
-    t.addEventListener('keydown', (e)=>{
-      if(e.key==='ArrowRight') activateTab((i+1)%tabs.length);
-      if(e.key==='ArrowLeft') activateTab((i-1+tabs.length)%tabs.length);
-      if(e.key==='Home') activateTab(0);
-      if(e.key==='End') activateTab(tabs.length-1);
-    });
+    const add = (from, to, weight) => upsertEdge(state.graph, { from, to, weight, id: edgeKey(from, to) });
+    add('A', 'B', 3);
+    add('A', 'C', 2);
+    add('B', 'D', 5);
+    add('C', 'D', 4);
+    add('C', 'E', 1);
+    add('E', 'D', 1);
+    requestGraphReset();
+    fillNodeSelects();
+    refreshEdgesTable();
+    scheduleRender();
+    toast('Ejemplo autocompletado.', 'success');
   });
 
-  /* ====== Inspector demo ====== */
-  $('#btnInspectorSelect').addEventListener('click', ()=>{
-    $('#inspectorElement').value = 'Nodo A'; $('#inspectorWeight').value = '—'; toast('Inspector actualizado.', 'success');
-  });
-  $('#btnInspectorEdit').addEventListener('click', ()=> $('#modalEdgeEditor').showModal());
-  $('#btnInspectorDelete').addEventListener('click', ()=> $('#modalConfirm').showModal());
-
-  /* ====== Atajos ====== */
-  document.addEventListener('keydown', (e)=>{
-    if(e.altKey){
-      const n = Number(e.key); if(n>=1 && n<=4){ e.preventDefault(); setActiveStep(n); }
-    }
-    if(e.key===' ' && !e.target.matches('input,textarea')){
-      if($('#btnPlay').disabled) return;
-      e.preventDefault();
-      if($('#btnPlay').hidden) $('#btnPause').click(); else $('#btnPlay').click();
-    }
-    if(e.key==='ArrowRight' && !e.target.matches('input[type="range"]')){ if(!$('#btnNext').disabled) $('#btnNext').click(); }
-    if(e.key==='ArrowLeft' && !e.target.matches('input[type="range"]')){ if(!$('#btnPrev').disabled) $('#btnPrev').click(); }
+  $('#btnClearGraph').addEventListener('click', () => {
+    state.graph = createGraph();
+    fillNodeSelects();
+    refreshEdgesTable();
+    requestGraphReset();
+    scheduleRender();
+    toast('Grafo limpiado.', 'success');
   });
 
-  /* ====== Export JSON ====== */
-  $('#btnExportJSON').addEventListener('click', ()=>{
+  $('#btnGenRandom').addEventListener('click', () => {
+    if (!validateNodeInput()) {
+      toast('El número de nodos debe estar entre 8 y 16.', 'error');
+      return;
+    }
+    generateRandomGraph(Number(inpN.value));
+    $('#modeBadge').textContent = 'modo: aleatorio';
+    fillNodeSelects();
+    refreshEdgesTable();
+    setActiveStep(2);
+    toast('Grafo aleatorio listo.', 'success');
+  });
+
+  $('#btnGenManual').addEventListener('click', () => {
+    if (!validateNodeInput()) {
+      toast('El número de nodos debe estar entre 8 y 16.', 'error');
+      return;
+    }
+    state.graph = createGraph();
+    requestGraphReset();
+    fillNodeSelects();
+    refreshEdgesTable();
+    $('#modeBadge').textContent = 'modo: manual';
+    setActiveStep(2);
+    toast('Añade nodos con “Añadir nodo”.', 'success');
+  });
+
+  $('#btnZoomIn').addEventListener('click', () => zoomBy(1.15));
+  $('#btnZoomOut').addEventListener('click', () => zoomBy(1 / 1.15));
+  $('#btnCenter').addEventListener('click', () => centerView());
+  $('#btnScreenshot').addEventListener('click', () => exportPNG());
+  $('#btnExportPNG').addEventListener('click', () => exportPNG());
+
+  $('#btnExportJSON').addEventListener('click', () => {
     const data = {
       nodes: Array.from(state.graph.nodes.values()),
       edges: Array.from(state.graph.edges.values()),
-      source: $('#selSource').value || null,
-      target: $('#selTarget').value || null,
+      source: selSource.value || null,
+      target: selTarget.value || null,
     };
-    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download='grafo.json'; a.click();
-    URL.revokeObjectURL(url); toast('JSON exportado.', 'success');
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'grafo.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    toast('JSON exportado.', 'success');
   });
 
-  /* ====== Sidebar responsive ====== */
-  const mql = window.matchMedia('(min-width:641px)');
-  mql.addEventListener('change', ()=>{ if(mql.matches) $('.sidebar').classList.remove('is-open'); });
+  btnRun.addEventListener('click', () => {
+    const source = selSource.value;
+    const target = selTarget.value;
+    if (!ensureGraphReadyForRun(source, target)) return;
+    runAlgorithm(source, target);
+    setActiveStep(3);
+  });
 
-  /* ====== Inicial ====== */
+  btnPlay.addEventListener('click', () => {
+    if (!state.animator) return;
+    state.animator.play();
+    btnPlay.hidden = true;
+    btnPause.hidden = false;
+  });
+
+  btnPause.addEventListener('click', () => {
+    if (!state.animator) return;
+    state.animator.pause();
+    btnPlay.hidden = false;
+    btnPause.hidden = true;
+  });
+
+  btnReplay.addEventListener('click', () => {
+    if (!state.animator) return;
+    state.animator.pause();
+    state.animator.seek(0);
+    btnPlay.hidden = false;
+    btnPause.hidden = true;
+  });
+
+  btnNext.addEventListener('click', () => {
+    if (!state.animator) return;
+    const targetIndex = clamp(state.animator.position + 1, 0, state.animator.length - 1);
+    state.animator.pause();
+    btnPlay.hidden = false;
+    btnPause.hidden = true;
+    state.animator.seek(targetIndex);
+  });
+
+  btnPrev.addEventListener('click', () => {
+    if (!state.animator) return;
+    const targetIndex = clamp(state.animator.position - 1, 0, state.animator.length - 1);
+    state.animator.pause();
+    btnPlay.hidden = false;
+    btnPause.hidden = true;
+    state.animator.seek(targetIndex);
+  });
+
+  progress.addEventListener('input', (event) => {
+    if (!state.animator) return;
+    const index = Number(event.target.value);
+    state.animator.pause();
+    btnPlay.hidden = false;
+    btnPause.hidden = true;
+    state.animator.seek(index);
+  });
+
+  rangeSpeed.addEventListener('input', (event) => {
+    const speed = Number(event.target.value);
+    if (state.animator) state.animator.setSpeed(speed);
+  });
+
+  pathsList.addEventListener('change', (event) => {
+    if (event.target.name === 'path') {
+      updateSelectedPath(event.target.value);
+    }
+  });
+
+  edgeFromInput.addEventListener('input', resetEdgeFormError);
+  edgeToInput.addEventListener('input', resetEdgeFormError);
+  edgeWeightInput.addEventListener('input', resetEdgeFormError);
+  inpN.addEventListener('input', validateNodeInput);
+
+  $('.steps').addEventListener('click', (event) => {
+    const btn = event.target.closest('.step-btn');
+    if (!btn) return;
+    const step = Number(btn.parentElement.dataset.step);
+    if (Number.isFinite(step)) {
+      setActiveStep(step);
+    }
+  });
+
+  $('#btnHelp').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      $('#modalHelp').close();
+    }
+  });
+
+  wrap.addEventListener('click', (event) => {
+    if (!state.addNodeMode) return;
+    if (wrap.dataset.dragging === 'true') return;
+    const point = screenToWorld({ x: event.offsetX, y: event.offsetY });
+    const id = nextNodeId();
+    addNode(state.graph, { id, x: point.x, y: point.y });
+    setAddNodeMode(false);
+    requestGraphReset();
+    fillNodeSelects();
+    scheduleRender();
+    toast(`Nodo ${id} añadido.`, 'success');
+  });
+}
+
+function initCanvasInteractions() {
+  let dragging = false;
+  let moved = false;
+  let last = { x: 0, y: 0 };
+  wrap.dataset.dragging = 'false';
+  wrap.addEventListener('mousedown', (event) => {
+    dragging = true;
+    moved = false;
+    last = { x: event.offsetX, y: event.offsetY };
+    wrap.dataset.dragging = 'false';
+  });
+  window.addEventListener('mouseup', () => {
+    if (dragging && moved) wrap.dataset.dragging = 'true';
+    dragging = false;
+    setTimeout(() => { wrap.dataset.dragging = 'false'; }, 0);
+  });
+  wrap.addEventListener('mousemove', (event) => {
+    if (!dragging) return;
+    const dx = event.offsetX - last.x;
+    const dy = event.offsetY - last.y;
+    if (Math.abs(dx) > 0 || Math.abs(dy) > 0) {
+      moved = true;
+    }
+    state.pan.x += dx;
+    state.pan.y += dy;
+    last = { x: event.offsetX, y: event.offsetY };
+    scheduleRender();
+  });
+  wrap.addEventListener('wheel', (event) => {
+    if (event.ctrlKey) {
+      event.preventDefault();
+      const scale = Math.exp(-event.deltaY * 0.0015);
+      const before = screenToWorld({ x: event.offsetX, y: event.offsetY });
+      state.zoom = clamp(state.zoom * scale, 0.4, 3);
+      const after = screenToWorld({ x: event.offsetX, y: event.offsetY });
+      state.pan.x += (after.x - before.x) * state.zoom;
+      state.pan.y += (after.y - before.y) * state.zoom;
+      scheduleRender();
+    }
+  }, { passive: false });
+}
+
+function init() {
   setActiveStep(1);
-  redraw();
-})();
+  requestGraphReset();
+  resetEdgeFormError();
+  bindEvents();
+  initCanvasInteractions();
+  initTabs();
+  initInspectorDemo();
+  setupKeyboardShortcuts();
+  initSidebarToggle();
+  scheduleRender();
+}
+
+init();

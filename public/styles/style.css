@@ -69,6 +69,7 @@ input.is-invalid{border-color:var(--danger)}
 
 /* Buttons */
 .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel);cursor:pointer;color:var(--text)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.primary{background:var(--primary);border-color:var(--primary);color:#0b1220}
 .btn.ghost{background:transparent}
 .btn.danger{background:var(--danger);border-color:var(--danger);color:#140b0b}
@@ -91,6 +92,7 @@ input.is-invalid{border-color:var(--danger)}
 .paths{list-style:none;padding-left:0;display:grid;gap:6px}
 .paths li.is-active{outline:2px solid var(--primary);border-radius:8px;padding:4px}
 .log{display:grid;gap:6px}
+.log li.is-active{background:color-mix(in oklab, var(--primary) 18%, transparent);border-radius:8px;padding:4px}
 
 /* Modals + Toasts */
 .modal{border:none;padding:0;background:color-mix(in oklab, var(--bg) 40%, transparent)}
