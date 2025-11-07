@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matrices | Parque de las Leyendas</title>
+  <link rel="stylesheet" href="public/styles/matrices.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Matrices del grafo</h1>
+    <nav class="tabs">
+      <a href="index.html">Planificar</a>
+      <a href="pasos.html">Paso a paso</a>
+      <a href="matrices.html" aria-current="page">Matrices</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <div class="controls">
+      <label class="radio"><input type="radio" name="mtx" value="adj" checked> Adyacencia (0/1)</label>
+      <label class="radio"><input type="radio" name="mtx" value="w"> Pesos (enteros)</label>
+      <button id="btnCSV" class="btn">Exportar CSV</button>
+    </div>
+
+    <div class="tablewrap">
+      <table id="mtxTable"><thead></thead><tbody></tbody></table>
+    </div>
+  </main>
+
+  <script src="public/scripts/matrices.js"></script>
+</body>
+</html>

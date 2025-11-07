@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paso a paso | Parque de las Leyendas</title>
+  <link rel="stylesheet" href="public/styles/pasos.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Paso a paso (Dijkstra)</h1>
+    <nav class="tabs">
+      <a href="index.html">Planificar</a>
+      <a href="pasos.html" aria-current="page">Paso a paso</a>
+      <a href="matrices.html">Matrices</a>
+    </nav>
+  </header>
+
+  <main class="container">
+    <p class="hint" id="summary">Cargando…</p>
+    <div class="tablewrap">
+      <table id="stepsTable" aria-label="Iteraciones">
+        <thead>
+          <tr>
+            <th>Iteración</th>
+            <th>Nodo procesado</th>
+            <th>Visitados</th>
+            <th>Distancias (acumulado)</th>
+            <th>Predecesores</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="public/scripts/pasos.js"></script>
+</body>
+</html>
