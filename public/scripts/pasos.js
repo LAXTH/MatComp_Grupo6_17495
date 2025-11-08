@@ -1,27 +1,26 @@
-/* Lee de localStorage los pasos guardados en Planificar y los muestra */
+(()=>{"use strict";
 const $=s=>document.querySelector(s);
-const fmt=n=>Number.isFinite(n)? n.toFixed(0) : "∞";
+const S=sessionStorage;
+const fmt=n=>Number.isFinite(n)?n.toFixed(0):"∞";
 
 function load(){
-  const steps = JSON.parse(localStorage.getItem("matcomp_steps")||"[]");
-  const summary = JSON.parse(localStorage.getItem("matcomp_summary")||"null");
-
-  if(!steps.length || !summary){
-    $("#summary").textContent = "No hay datos. Calcula una ruta en la página Planificar.";
+  const steps=JSON.parse(S.getItem("matcomp_steps")||"null");
+  const sum=JSON.parse(S.getItem("matcomp_summary")||"null");
+  if(!steps || !steps.length || !sum || !sum.o || !sum.d){
+    $("#summary").innerHTML="No hay datos. Ve a <a href='index.html'>Planificar</a>, calcula una ruta y regresa.";
     return;
   }
+  $("#summary").textContent=`Ruta ${sum.o} → ${sum.d} | Distancia: ${fmt(sum.dist)} m`;
 
-  $("#summary").textContent = `Última ruta: ${summary.o} → ${summary.d} (distancia ${Number(summary.dist).toFixed(0)} u)`;
-
-  const tb=$("#stepsTable tbody"); tb.innerHTML="";
+  const ids=Object.keys(steps[steps.length-1].dist);
+  const tbody=$("#tbl tbody"); tbody.innerHTML="";
   for(const s of steps){
-    const dStr=Object.entries(s.dist).map(([k,v])=>`${k}:${fmt(v)}`).join("  ");
-    const pStr=Object.entries(s.prev).map(([k,a])=>a.length?`${k}←${a.join("|")}`:`${k}←–`).join("  ");
+    const distRow=ids.map(k=>`${k}:${fmt(s.dist[k])}`).join(" · ");
+    const prevRow=ids.map(k=>`${k}←${(s.prev[k]||[]).join("/")||"–"}`).join(" · ");
     const tr=document.createElement("tr");
-    tr.innerHTML=`<td>${s.i}</td><td>${s.processed}</td><td>${s.visited.join(", ")}</td>
-      <td style="font-family:ui-monospace,Consolas">${dStr}</td>
-      <td style="font-family:ui-monospace,Consolas">${pStr}</td>`;
-    tb.appendChild(tr);
+    tr.innerHTML=`<td>${s.i}</td><td>${s.processed}</td><td>${s.visited.join(", ")}</td><td>${distRow}</td><td>${prevRow}</td>`;
+    tbody.appendChild(tr);
   }
 }
-document.addEventListener("DOMContentLoaded", load);
+document.addEventListener("DOMContentLoaded",load);
+})();

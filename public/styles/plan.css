@@ -1,76 +1,172 @@
+/* ===========================
+   plan.css — Estilos completos
+   =========================== */
+
 :root{
-  --bg:#0b1024; --card:#101826; --ink:#e6e8ec; --muted:#9aa3ad;
-  --brand:#22d3ee; --accent:#34d399; --warn:#f59e0b; --edge:#9db7ff;
+  --bg-1:#cfe4b0; --bg-2:#6aa06a;
+  --card:#eef2e8; --card-soft:#f6fbf2;
+  --ink:#0c1a0c; --muted:#4f6b4f;
+  --chip:#e3ead8; --chip-b:#c9d8b8; --chip-shadow:#b1c7a5;
+  --primary:#c9efb5; --primary-b:#8dbf7c;
+  --success:#69d49e;
+  --edge:#1f2720;
+  --node:#6aa06a; --node-b:#274427;
 }
+
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0; font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--ink); background:var(--bg)}
+body{
+  margin:0; color:var(--ink);
+  font-family:system-ui, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
+  background:linear-gradient(180deg,var(--bg-1),var(--bg-2));
+  background-attachment:fixed;
+}
 
-.topbar{padding:16px 12px; text-align:center; border-bottom:1px solid #0a0f1f}
-.topbar h1{margin:.2rem 0; font-size:clamp(1.2rem,2.6vw,1.9rem)}
-.topbar p{margin:0; color:var(--muted)}
-.tabs{display:flex; justify-content:center; gap:8px; margin-top:10px; flex-wrap:wrap}
-.tabs a{color:var(--ink); text-decoration:none; padding:.45rem .8rem; border-radius:999px; border:1px solid #1f2a3a; background:#0e1627}
-.tabs a[aria-current="page"]{background:var(--brand); color:#001018; border-color:#0ea5b7}
+/* ===== Header + Tabs ===== */
+.topbar{padding:26px 12px 10px; text-align:center}
+.topbar h1{
+  margin:0 0 14px;
+  font-weight:900;
+  font-size:clamp(1.6rem,3.2vw,2.4rem)
+}
+.tabs{
+  display:flex; justify-content:center; gap:12px; flex-wrap:wrap
+}
+.tabs a{
+  text-decoration:none; color:var(--ink); font-weight:800;
+  background:var(--chip); border:2px solid var(--chip-b); border-radius:999px;
+  padding:.55rem 1.0rem; box-shadow:0 2px 0 var(--chip-shadow) inset;
+}
+.tabs a[aria-current="page"]{ background:#d7f0c8; border-color:#8eb97e; }
 
-.layout{max-width:1200px; margin:18px auto; padding:0 12px; display:grid; grid-template-columns:420px 1fr; gap:14px}
+/* ===== Layout ===== */
+.layout{
+  max-width:1200px; margin:16px auto 30px; padding:0 12px;
+  display:grid; gap:16px; grid-template-columns:430px 1fr;
+}
 @media (max-width:980px){ .layout{grid-template-columns:1fr} }
 
-.panel{background:var(--card); border:1px solid #1f2937; border-radius:16px; padding:14px; box-shadow:0 10px 26px #0006}
-.panel h2{margin:6px 4px 12px}
+/* ===== Panels ===== */
+.panel{
+  background:var(--card); border:2px solid var(--chip-b);
+  border-radius:18px; padding:14px; box-shadow:0 6px 0 var(--chip-shadow);
+}
+.panel h2{margin:2px 2px 10px; font-weight:900}
+.panel-title{
+  text-align:center; font-weight:900; text-transform:uppercase; letter-spacing:.04em;
+  background:#e9efdf; border:2px solid var(--chip-b);
+  border-radius:12px; padding:8px 0; margin-bottom:10px;
+}
 
-.form{display:grid; gap:10px}
-.field{display:grid; gap:4px}
+/* ===== Forms ===== */
+.form{display:grid; gap:12px}
+.field{display:grid; gap:6px}
+.field span{font-size:.95rem}
+.field.compact span{font-size:.84rem; color:var(--muted)}
 .inline{display:flex; gap:10px; align-items:center}
-.check{display:inline-flex; gap:6px; align-items:center}
-#nodeCount{flex:1}
+.inline.full{width:100%}
+#nodeCount{flex:1; width:100%}
 #nodeCountOut{min-width:2ch; text-align:right; font-variant:tabular-nums}
-#zoom{width:160px}
 
-.actions,.toolbar{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.choice-stack{display:grid; gap:10px}
+.choice-stack select{width:100%}
+
+.actions{display:flex; gap:10px; flex-wrap:wrap}
+
+/* ===== Buttons ===== */
 .btn{
-  appearance:none; border:1px solid #334155; background:#0b1225; color:var(--ink);
-  padding:.55rem .85rem; border-radius:12px; cursor:pointer; transition:.15s;
+  appearance:none; border:2px solid var(--chip-b); background:#e9f0e1; color:var(--ink);
+  padding:.62rem 1rem; border-radius:12px; cursor:pointer; transition:transform .15s;
+  font-weight:800; box-shadow:0 2px 0 var(--chip-shadow) inset;
 }
 .btn:hover{transform:translateY(-1px)}
-.btn--primary{background:var(--brand); color:#001018; border-color:#0ea5b7}
-
-.result{margin-top:6px}
-.stats{display:grid; gap:4px}
-.stats dt{color:var(--muted)} .stats dd{margin:0 0 4px 0; font-weight:700}
-
-/* --- MAPA --- */
-.panel--map .map-toolbar{
-  display:flex; justify-content:space-between; align-items:center; gap:12px; margin:6px 0 10px;
+.btn--primary{background:var(--primary); border-color:var(--primary-b)}
+.btn--toggle[aria-pressed="true"]{
+  background:#b8e7a0; border-color:#6aa06a; box-shadow:0 0 0 3px #5fb56a55
 }
-.panel--map .map{border:1px solid #1f2937; border-radius:16px; overflow:hidden; background:#0c1425}
+.btn--tiny{padding:.35rem .6rem}
+.btn--huge{padding:.7rem 1.25rem; min-width:130px}
+
+/* ===== Result card ===== */
+.card-soft{
+  background:var(--card-soft); border:2px solid var(--chip-b);
+  border-radius:14px; padding:10px
+}
+.card-soft h3{margin:0 0 8px}
+.row-two-vertical{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:8px}
+.block-val{display:grid; gap:6px}
+.block-val .lbl{font-size:.9rem; color:var(--muted)}
+.chip{
+  display:inline-block; padding:.35rem .6rem; border-radius:999px;
+  background:#e3ead8; border:2px solid #c9d8b8; font-weight:900; min-width:3ch; text-align:center
+}
+.stats{display:grid; gap:6px}
+.stats dt{color:var(--muted)} .stats dd{margin:0 0 4px 0; font-weight:800}
+
+/* ===== Map Toolbar ===== */
+.map-toolbar{
+  display:grid;
+  grid-template-columns:1fr auto; /* izq = PUNTO/RUTA/BORRAR | der = PESOS + LIMPIAR */
+  gap:12px;
+  align-items:center;
+  margin:6px 0 10px;
+}
+.tools-left{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.tools-right{display:flex; gap:10px; align-items:center; justify-content:flex-end}
+.zoom-bar{
+  grid-column:1 / -1; /* ancho completo debajo de la toolbar */
+  display:flex; gap:8px; align-items:center; width:100%;
+}
+#zoom{flex:1; width:100%}
+
+/* ===== Map Container ===== */
+.panel--map .map{
+  border:2px solid var(--chip-b); border-radius:16px; overflow:hidden; background:#f2f6ed
+}
 .svg{display:block; width:100%}
-.ground{fill:#0e162b}
+.ground{fill:#f2f6ed}
 
-/* Capas: edges -> route -> weights -> nodes */
-.edge{stroke:var(--edge); stroke-width:3.2; opacity:.9}
-.weight{fill:#dbe6ff; font-size:3px; user-select:none; paint-order:stroke; stroke:#0c1425; stroke-width:.5px}
-.node{cursor:pointer}
-.node circle{
-  fill:#0ea5b7;
-  stroke:#082f34;
-  stroke-width:0.6;         /* borde mínimo */
-  r:1.8;                    /* círculo un poco más grande */
-}
-.node text{
-  font-size:3.1px;          /* para que no sobresalga */
-  font-weight:800;
-  fill:#001013;
+/* ===== Map Layers ===== */
+/* Ruta (arista) */
+.edge{stroke:var(--edge); stroke-width:2.0; stroke-linecap:round; opacity:.98}
+
+/* Pesos (m) — sin halo/relieve */
+.weight{
+  fill:#0a4b32;
+  font-size:2.0px;
   user-select:none;
-  dominant-baseline:middle;
-  text-anchor:middle;
+  /* sin paint-order ni stroke */
 }
-.node--hidden{display:none}
-.node--visited circle{fill:#a7f3d0}
 
-/* Ruta */
-.route-line{stroke:var(--accent); stroke-width:3; opacity:.75; mix-blend-mode:screen; pointer-events:none}
-.route-dot{fill:#fff; stroke:#10b981; stroke-width:1.2; pointer-events:none}
+/* Nodos */
+.node{cursor:pointer}
+.node circle{ fill:var(--node); stroke:var(--node-b); stroke-width:.7; r:2.6 }
+.node text.letter{
+  font-size:3.0px; font-weight:900; fill:#0c1a0c;
+  user-select:none; dominant-baseline:middle; text-anchor:middle
+}
+/* Nombres con contorno blanco (efecto trasladado desde pesos) */
+.node text.name{
+  font-size:2.1px; fill:#204a24;
+  text-anchor:middle; dominant-baseline:hanging;
+  paint-order:stroke; stroke:#ffffff; stroke-width:1.2px;
+}
 
-.player{display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap}
+/* Ruta animada + preview */
+.route-line{stroke:#68d49e; stroke-width:3.2; opacity:.85; mix-blend-mode:multiply; pointer-events:none}
+.route-dot{fill:#fff; stroke:#2fbf7a; stroke-width:1.2; pointer-events:none}
+#ghost{pointer-events:none}
+.ghost-circle{ fill:#7fd48f55; stroke:#2fbf7a; stroke-width:.7; stroke-dasharray:2 1 }
+.ghost-label{ fill:#174d2b; font-size:2.6px; font-weight:900; text-anchor:middle; dominant-baseline:middle }
+
+/* Ocultos (cuando se reduce “Nodos a usar”) */
+.node--hidden{ display:none }
+.edge--hidden, .weight--hidden{ display:none }
+
+/* ===== Bottom actions (solo player) ===== */
+.bottom-actions{
+  display:flex; justify-content:space-between; align-items:center;
+  gap:14px; margin-top:10px; flex-wrap:wrap
+}
+.player{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
 .player__status{color:var(--muted)}

@@ -1,13 +1,16 @@
-:root{ --bg:#0b1024; --card:#101826; --ink:#e6e8ec; --muted:#9aa3ad; --brand:#22d3ee; }
-*{box-sizing:border-box}
-body{margin:0; font-family:system-ui,Segoe UI,Roboto,Arial; color:var(--ink); background:var(--bg)}
-.topbar{padding:16px 12px; text-align:center; border-bottom:1px solid #0a0f1f}
-.tabs{display:flex; justify-content:center; gap:8px}
-.tabs a{color:var(--ink); text-decoration:none; padding:.45rem .8rem; border-radius:999px; border:1px solid #1f2a3a; background:#0e1627}
-.tabs a[aria-current="page"]{background:var(--brand); color:#001018; border-color:#0ea5b7}
-.container{max-width:1100px; margin:18px auto; padding:0 12px}
-.hint{color:var(--muted); margin:8px 0}
-.tablewrap{overflow:auto; border:1px solid #1f2937; border-radius:12px}
-table{width:100%; border-collapse:collapse; background:#0a1124}
-th,td{padding:.55rem .6rem; border-bottom:1px solid #1f2937; vertical-align:top; text-align:left}
-thead th{position:sticky; top:0; background:#0c142b}
+@import url('./plan.css');
+
+.wrap{max-width:1100px;margin:18px auto;padding:0 12px}
+.card{
+  background:var(--card); border:2px solid var(--chip-b);
+  border-radius:18px; padding:14px; box-shadow:0 6px 0 var(--chip-shadow)
+}
+.card h2{margin:0 0 12px;font-weight:900}
+.muted{color:var(--muted)}
+
+.grid{width:100%;border-collapse:separate;border-spacing:0}
+.grid th,.grid td{
+  border-bottom:1px solid var(--chip-b); padding:8px 10px; text-align:left; vertical-align:top
+}
+.grid thead th{background:var(--chip)}
+.grid tbody tr:hover{background:var(--card-soft)}

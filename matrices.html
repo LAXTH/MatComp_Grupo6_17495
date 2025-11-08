@@ -8,24 +8,29 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Matrices del grafo</h1>
+    <h1>Guía interactiva del Parque de las Leyendas</h1>
     <nav class="tabs">
-      <a href="index.html">Planificar</a>
-      <a href="pasos.html">Paso a paso</a>
-      <a href="matrices.html" aria-current="page">Matrices</a>
+      <a href="index.html">PLANIFICAR</a>
+      <a href="pasos.html">PASO A PASO</a>
+      <a href="matrices.html" aria-current="page">MATRICES</a>
     </nav>
   </header>
 
-  <main class="container">
-    <div class="controls">
-      <label class="radio"><input type="radio" name="mtx" value="adj" checked> Adyacencia (0/1)</label>
-      <label class="radio"><input type="radio" name="mtx" value="w"> Pesos (enteros)</label>
-      <button id="btnCSV" class="btn">Exportar CSV</button>
-    </div>
+  <main class="wrap">
+    <section class="card">
+      <h2>MATRICES DEL GRAFO</h2>
 
-    <div class="tablewrap">
-      <table id="mtxTable"><thead></thead><tbody></tbody></table>
-    </div>
+      <div class="controls">
+        <label><input type="radio" name="mtx" value="adj" checked> Adyacencia</label>
+        <label><input type="radio" name="mtx" value="w"> Pesos (m)</label>
+        <button id="btnCSV" class="btn">Exportar CSV</button>
+      </div>
+
+      <table id="mtxTable" class="grid">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </section>
   </main>
 
   <script src="public/scripts/matrices.js"></script>

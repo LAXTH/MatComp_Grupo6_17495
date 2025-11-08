@@ -3,86 +3,88 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Planificar tu visita | Parque de las Leyendas</title>
+  <title>Planificar | Parque de las Leyendas</title>
   <link rel="stylesheet" href="public/styles/plan.css" />
 </head>
 <body>
   <header class="topbar">
     <h1>Guía interactiva del Parque de las Leyendas</h1>
-    <p>Camino mínimo (Dijkstra) con edición manual.</p>
     <nav class="tabs">
-      <a href="index.html" aria-current="page">Planificar</a>
-      <a href="pasos.html">Paso a paso</a>
-      <a href="matrices.html">Matrices</a>
+      <a href="index.html" aria-current="page">PLANIFICAR</a>
+      <a href="pasos.html">PASO A PASO</a>
+      <a href="matrices.html">MATRICES</a>
     </nav>
   </header>
 
   <main class="layout">
-    <section class="panel">
-      <h2>Planificar tu visita</h2>
+    <!-- Panel izquierdo -->
+    <section class="panel" aria-labelledby="ttl-plan">
+      <h2 id="ttl-plan">Planifica tu visita</h2>
 
       <form id="planner" class="form" autocomplete="off">
         <label class="field">
-          <span>Nodos a usar (8–16):</span>
-          <div class="inline">
+          <span>Nodos a usar (8–16)</span>
+          <div class="inline full">
             <input id="nodeCount" type="range" min="8" max="16" step="1" value="16" />
             <output id="nodeCountOut" for="nodeCount">16</output>
           </div>
         </label>
 
-        <label class="field">
-          <span>Me encuentro en:</span>
-          <select id="origin"></select>
-        </label>
-        <label class="field">
-          <span>Quiero ir a:</span>
-          <select id="destination"></select>
-        </label>
+        <div class="choice-stack">
+          <label class="field compact">
+            <span>Me encuentro en</span>
+            <select id="origin" aria-label="Origen"></select>
+          </label>
+          <label class="field compact">
+            <span>Quiero ir a</span>
+            <select id="destination" aria-label="Destino"></select>
+          </label>
+        </div>
 
         <div class="actions">
-          <button type="button" id="btnSolve" class="btn btn--primary">Calcular ruta</button>
-          <button type="button" id="btnClear" class="btn">Limpiar</button>
+          <button type="button" id="btnSolve" class="btn btn--primary">REPRODUCIR</button>
         </div>
 
-        <div class="toolbar">
-          <button type="button" id="modeAddNode" class="btn btn--ghost" aria-pressed="false" title="Agregar punto (clic en el mapa)">➕ Punto</button>
-          <button type="button" id="modeAddEdge" class="btn btn--ghost" aria-pressed="false" title="Crear arista (clic nodo A y luego B)">🔗 Arista</button>
-          <button type="button" id="modeDelete"  class="btn btn--ghost" aria-pressed="false" title="Eliminar nodo o arista">🗑️ Borrar</button>
-        </div>
-
-        <div class="field">
-          <span>Rutas óptimas múltiples:</span>
-          <div class="inline">
-            <button type="button" id="btnAltPath" class="btn" disabled>Otra ruta óptima</button>
+        <div class="result card-soft" aria-live="polite">
+          <h3>Tu ruta Óptima</h3>
+          <div class="row-two-vertical">
+            <div class="block-val">
+              <span class="lbl">Empieza en</span>
+              <span id="outStart" class="chip">–</span>
+            </div>
+            <div class="block-val">
+              <span class="lbl">Llega a</span>
+              <span id="outEnd" class="chip">–</span>
+            </div>
           </div>
+          <dl class="stats">
+            <div><dt>Distancia</dt><dd id="outDistance">–</dd></div>
+            <div><dt>Secuencia</dt><dd id="outPath">–</dd></div>
+            <div><dt>Rutas óptimas (si hay empates)</dt><dd id="outAlt">–</dd></div>
+          </dl>
+          <button type="button" id="btnAltPath" class="btn" disabled>OTRA RUTA</button>
         </div>
       </form>
-
-      <div class="result">
-        <h3>Tu ruta óptima</h3>
-        <dl class="stats">
-          <div><dt>Distancia:</dt><dd id="outDistance">–</dd></div>
-          <div><dt>Empieza en:</dt><dd id="outStart">–</dd></div>
-          <div><dt>Llega a:</dt><dd id="outEnd">–</dd></div>
-          <div><dt>Secuencia:</dt><dd id="outPath">–</dd></div>
-          <div><dt>Rutas óptimas (si hay empates):</dt><dd id="outAlt">–</dd></div>
-        </dl>
-      </div>
     </section>
 
-    <section class="panel panel--map">
-      <h2>Mapa interactivo (simulado)</h2>
+    <!-- Panel derecho -->
+    <section class="panel panel--map" aria-labelledby="ttl-map">
+      <div id="ttl-map" class="panel-title">MAPA INTERACTIVO</div>
 
-      <!-- Opciones del mapa aquí (no en Planificar) -->
       <div class="map-toolbar">
-        <label class="check">
-          <input type="checkbox" id="chkWeights" checked /> Mostrar pesos (m)
-        </label>
-        <div class="inline">
-          <button type="button" id="zoomOut" class="btn">−</button>
-          <label>Zoom: <output id="zoomOutVal">85%</output></label>
-          <input id="zoom" type="range" min="75" max="125" value="85" />
-          <button type="button" id="zoomIn" class="btn">+</button>
+        <div class="tools-left">
+          <button type="button" id="modeAddNode" class="btn btn--toggle" aria-pressed="false">PUNTO</button>
+          <button type="button" id="modeAddEdge" class="btn btn--toggle" aria-pressed="false">RUTA</button>
+          <button type="button" id="modeDelete"  class="btn btn--toggle" aria-pressed="false">BORRAR</button>
+        </div>
+        <div class="tools-right">
+          <button type="button" id="btnToggleWeights" class="btn btn--toggle" aria-pressed="true">PESOS (m)</button>
+        </div>
+
+        <div class="zoom-bar" role="group" aria-label="Zoom del mapa">
+          <button type="button" id="zoomOut" class="btn btn--tiny" aria-label="Alejar">–</button>
+          <input id="zoom" type="range" min="75" max="125" value="85" aria-label="Zoom (%)" />
+          <button type="button" id="zoomIn" class="btn btn--tiny" aria-label="Acercar">+</button>
         </div>
       </div>
 
@@ -90,17 +92,22 @@
         <svg id="mapSvg" class="svg" viewBox="0 0 100 70" preserveAspectRatio="xMidYMid meet" aria-label="Mapa simulado">
           <rect x="0" y="0" width="100" height="70" class="ground"></rect>
           <g id="edges"></g>
-          <g id="route"></g>
           <g id="weights"></g>
+          <g id="route"></g>
+          <g id="ghost"></g>
           <g id="nodes"></g>
         </svg>
       </div>
 
-      <div class="player">
-        <button type="button" id="btnPlay"  class="btn btn--primary">▶️ Reproducir</button>
-        <button type="button" id="btnPause" class="btn">⏸️ Pausa</button>
-        <button type="button" id="btnReset" class="btn">🔄 Reiniciar</button>
-        <span id="playerStatus" class="player__status">Listo</span>
+      <!-- Abajo: player a la izquierda, LIMPIAR a la derecha -->
+      <div class="bottom-actions">
+        <div class="player">
+          <button type="button" id="btnPlay"  class="btn btn--primary">REPRODUCIR</button>
+          <button type="button" id="btnPause" class="btn">PAUSA</button>
+          <button type="button" id="btnReset" class="btn">REINICIAR</button>
+          <span id="playerStatus" class="player__status">Listo</span>
+        </div>
+        <button type="button" id="btnClear" class="btn btn--huge">LIMPIAR</button>
       </div>
     </section>
   </main>
@@ -108,6 +115,3 @@
   <script src="public/scripts/plan.js"></script>
 </body>
 </html>
-
-
-//Ragz
