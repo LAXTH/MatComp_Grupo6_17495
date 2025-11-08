@@ -130,12 +130,15 @@ body{
 /* Ruta (arista) */
 .edge{stroke:var(--edge); stroke-width:2.0; stroke-linecap:round; opacity:.98}
 
-/* Pesos (m) — sin halo/relieve */
+/* Pesos (m) — con halo blanco para legibilidad */
 .weight{
-  fill:#0a4b32;
-  font-size:2.0px;
-  user-select:none;
-  /* sin paint-order ni stroke */
+  fill:#0c1a0c;        /* Color de tinta más oscuro */
+  font-size: 2.4px;   /* Un poco más grande */
+  font-weight: 800;   /* Texto más grueso */
+  user-select: none;
+  paint-order: stroke; /* Asegura que el contorno se dibuje detrás */
+  stroke: #ffffff;    /* Contorno blanco */
+  stroke-width: 1.0px; /* Grosor del contorno */
 }
 
 /* Nodos */
