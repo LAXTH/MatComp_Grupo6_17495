@@ -4,7 +4,17 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Matrices | Parque de las Leyendas</title>
-  <link rel="stylesheet" href="public/styles/matrices.css" />
+  <link rel="stylesheet" href="public/styles/plan.css" />
+  <style>
+    main{max-width:1000px;margin:20px auto;padding:0 12px;display:grid;gap:20px}
+    table{width:100%;border-collapse:collapse;text-align:center}
+    th,td{border:1.5px solid #a6b99a;padding:6px 8px;font-size:.9rem}
+    th{background:#d9e7ce;font-weight:900}
+    td.highlight{background:#bfe3aa;font-weight:800}
+    caption{font-weight:900;margin-bottom:6px;text-align:left}
+    .msg-empty{text-align:center;padding:40px 0;font-weight:800;color:#4f6b4f}
+    .matrix{overflow-x:auto;margin-bottom:20px}
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -16,21 +26,25 @@
     </nav>
   </header>
 
-  <main class="wrap">
-    <section class="card">
-      <h2>MATRICES DEL GRAFO</h2>
-
-      <div class="controls">
-        <label><input type="radio" name="mtx" value="adj" checked> Adyacencia</label>
-        <label><input type="radio" name="mtx" value="w"> Pesos (m)</label>
-        <button id="btnCSV" class="btn">Exportar CSV</button>
-      </div>
-
-      <table id="mtxTable" class="grid">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
+  <main>
+    <section class="panel">
+      <h2>Matriz de Adyacencia</h2>
+      <div id="mtxAdj" class="matrix"></div>
     </section>
+
+    <section class="panel">
+      <h2>Matriz de Pesos</h2>
+      <div id="mtxW" class="matrix"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Algoritmo de Dijkstra (paso a paso)</h2>
+      <div class="matrix">
+        <table id="mtxTable"></table>
+      </div>
+    </section>
+
+    <div id="msgEmpty" class="msg-empty" hidden>No hay datos. Ve a <a href="index.html">Planificar</a>, calcula una ruta y regresa.</div>
   </main>
 
   <script src="public/scripts/matrices.js"></script>
