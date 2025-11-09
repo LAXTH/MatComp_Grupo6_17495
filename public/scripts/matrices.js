@@ -173,6 +173,20 @@
     container.innerHTML = html;
   }
 
+  // Función para reconstruir el camino óptimo
+  function getOptimalPath(steps, sum) {
+    const finalStep = steps[steps.length - 1];
+    const path = [sum.d];
+    let current = sum.d;
+    
+    while (current !== sum.o && finalStep.prev[current] && finalStep.prev[current].length > 0) {
+      current = finalStep.prev[current][0];
+      path.unshift(current);
+    }
+    
+    return path;
+  }
+
   // Función para obtener los valores de Dijkstra como en el Excel
   function getDijkstraStepValues(steps, sum) {
     const allVertices = [...new Set(steps.flatMap(step => Object.keys(step.dist || {})))].sort();
@@ -246,15 +260,13 @@
     return { allVertices, vertexValues, maxSteps };
   }
 
-  // Función para determinar qué nodo pintar en cada paso
-  function getNodeToHighlight(stepIndex, steps, sum) {
-    // Paso 1: pintar el origen A
-    if (stepIndex === 0) {
-      return sum.o;
+  // Función para determinar qué nodo pintar (solo el camino óptimo)
+  function getNodeToHighlight(stepIndex, optimalPath) {
+    // Solo pintar nodos del camino óptimo
+    if (stepIndex < optimalPath.length) {
+      return optimalPath[stepIndex];
     }
-    
-    // Pasos siguientes: pintar el nodo que se procesó en este paso
-    return steps[stepIndex].processed;
+    return null;
   }
 
   // Función principal para renderizar tabla de Dijkstra
@@ -271,6 +283,7 @@
     }
 
     const { allVertices, vertexValues, maxSteps } = getDijkstraStepValues(steps, sum);
+    const optimalPath = getOptimalPath(steps, sum);
 
     // Construir la tabla
     let html = `
@@ -289,7 +302,7 @@
       
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
         const currentValue = vertexValues[vertex][stepIndex];
-        const nodeToHighlight = getNodeToHighlight(stepIndex, steps, sum);
+        const nodeToHighlight = getNodeToHighlight(stepIndex, optimalPath);
         const isHighlighted = nodeToHighlight === vertex;
         const style = isHighlighted ? 'style="background-color: #ffeb3b;"' : '';
         
