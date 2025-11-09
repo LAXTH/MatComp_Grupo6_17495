@@ -364,7 +364,7 @@ function dijkstra(src){
   const Q=new Set(ids);
   const D=Object.fromEntries(ids.map(id=>[id,Infinity]));
   const P=Object.fromEntries(ids.map(id=>[id,[]]));
-  D[src]=0; const steps=[]; let it=0;
+  D[src]=0; state.steps=[]; let it=0;
 
   const adj=u=> [...state.edges.values()].filter(e=>{
     const A=state.nodes.get(e.from), B=state.nodes.get(e.to);
@@ -375,7 +375,7 @@ function dijkstra(src){
     let u=null,best=Infinity; for(const id of Q){ if(D[id]<best){best=D[id]; u=id;} }
     if(u===null) break; Q.delete(u);
 
-    steps.push({i:++it, processed:u, visited:ids.filter(x=>!Q.has(x)), dist:{...D}, prev:JSON.parse(JSON.stringify(P))}); // <--- MODIFICADO
+    state.steps.push({i:++it, processed:u, visited:ids.filter(x=>!Q.has(x)), dist:{...D}, prev:JSON.parse(JSON.stringify(P))});
 
     for(const e of adj(u)){
       if(!Q.has(e.to)) continue;
@@ -384,7 +384,7 @@ function dijkstra(src){
       else if(Math.abs(alt-D[e.to])<=1e-9){ if(!P[e.to].includes(u)) P[e.to].push(u); } // empates
     }
   }
-  return {D,P,steps}; // <--- MODIFICADO
+  return {D,P};
 }
 function allShortestPaths(P,start,goal){
   const out=[], st=[[goal,[goal]]];
@@ -452,11 +452,11 @@ function solve(){
   if(o===d){ toast("El origen y el destino deben ser diferentes."); return; }
   if(!hasEdges()){ toast("No hay rutas activas. Usa RUTA para conectar puntos."); return; }
 
-  const {D,P,steps}=dijkstra(o); const dOD=D[d]; // <--- MODIFICADO
+  const {D,P}=dijkstra(o); const dOD=D[d];
   if(!isFinite(dOD)){ toast("No existe un camino entre los puntos seleccionados."); return; }
 
   state.paths=allShortestPaths(P,o,d); state.pathIndex=0;
-  state.steps = steps; // <-- AÑADIDO: Guardar los pasos de esta ejecución
+  
 
   $("#outDistance").textContent=fmt(dOD)+" m";
   $("#outStart").textContent=o; $("#outEnd").textContent=d;
@@ -473,7 +473,32 @@ function solve(){
 }
 $("#btnSolve").onclick=solve;
 
-$("#btnRecommend").onclick=solveRecommended;
+// --- REEMPLAZA LA LÍNEA ANTERIOR CON ESTO ---
+
+$("#btnRecommend").onclick = () => {
+  const min = 8;
+  const max = 16;
+  
+  // 1. Generar un número aleatorio de nodos (entre 8 y 16)
+  const randomNodeCount = Math.floor(Math.random() * (max - min + 1)) + min;
+
+  // 2. Actualizar el valor del slider
+  $("#nodeCount").value = randomNodeCount;
+  
+  // 3. Actualizar el número que se muestra al lado del slider
+  $("#nodeCountOut").value = randomNodeCount;
+  
+  // 4. Llamar a la función que SÍ aplica los cambios al mapa
+  applyNodeCount(randomNodeCount);
+  
+  // 5. Actualizar los menús desplegables de origen/destino
+  fillSelects();
+  restoreSelection();
+  
+  // 6. Limpiar cualquier ruta anterior
+  $("#btnClear").onclick(); // Simula un clic en "LIMPIAR"
+  toast("Se ha generado un grafo aleatorio.");
+};
 
 // --- REEMPLAZA LA FUNCIÓN ANTERIOR POR ESTA VERSIÓN FINAL ---
 
