@@ -11,6 +11,15 @@ const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const key = (a,b)=>`${a}->${b}`;
 
+/* --- FUNCIÓN AÑADIDA --- */
+const shuffle = (arr) => {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
 /* ===== Rotulado (puestos del zoológico) ===== */
 const NAMES={
   A:"Entrada Principal", I:"Aves", B:"Felinos", C:"Reptiles",
@@ -355,7 +364,7 @@ function dijkstra(src){
   const Q=new Set(ids);
   const D=Object.fromEntries(ids.map(id=>[id,Infinity]));
   const P=Object.fromEntries(ids.map(id=>[id,[]]));
-  D[src]=0; state.steps=[]; let it=0;
+  D[src]=0; const steps=[]; let it=0;
 
   const adj=u=> [...state.edges.values()].filter(e=>{
     const A=state.nodes.get(e.from), B=state.nodes.get(e.to);
@@ -366,7 +375,7 @@ function dijkstra(src){
     let u=null,best=Infinity; for(const id of Q){ if(D[id]<best){best=D[id]; u=id;} }
     if(u===null) break; Q.delete(u);
 
-    state.steps.push({i:++it, processed:u, visited:ids.filter(x=>!Q.has(x)), dist:{...D}, prev:JSON.parse(JSON.stringify(P))});
+    steps.push({i:++it, processed:u, visited:ids.filter(x=>!Q.has(x)), dist:{...D}, prev:JSON.parse(JSON.stringify(P))}); // <--- MODIFICADO
 
     for(const e of adj(u)){
       if(!Q.has(e.to)) continue;
@@ -375,7 +384,7 @@ function dijkstra(src){
       else if(Math.abs(alt-D[e.to])<=1e-9){ if(!P[e.to].includes(u)) P[e.to].push(u); } // empates
     }
   }
-  return {D,P};
+  return {D,P,steps}; // <--- MODIFICADO
 }
 function allShortestPaths(P,start,goal){
   const out=[], st=[[goal,[goal]]];
@@ -443,10 +452,11 @@ function solve(){
   if(o===d){ toast("El origen y el destino deben ser diferentes."); return; }
   if(!hasEdges()){ toast("No hay rutas activas. Usa RUTA para conectar puntos."); return; }
 
-  const {D,P}=dijkstra(o); const dOD=D[d];
+  const {D,P,steps}=dijkstra(o); const dOD=D[d]; // <--- MODIFICADO
   if(!isFinite(dOD)){ toast("No existe un camino entre los puntos seleccionados."); return; }
 
   state.paths=allShortestPaths(P,o,d); state.pathIndex=0;
+  state.steps = steps; // <-- AÑADIDO: Guardar los pasos de esta ejecución
 
   $("#outDistance").textContent=fmt(dOD)+" m";
   $("#outStart").textContent=o; $("#outEnd").textContent=d;
@@ -462,6 +472,151 @@ function solve(){
   anim.playing=false; anim.seg=0; anim.segT=0; drawRoute(true);
 }
 $("#btnSolve").onclick=solve;
+
+$("#btnRecommend").onclick=solveRecommended;
+
+// --- REEMPLAZA LA FUNCIÓN ANTERIOR POR ESTA VERSIÓN FINAL ---
+
+function solveRecommended() {
+  const activeNodes = [...state.nodes.values()].filter(n => !n.hidden).map(n => n.id);
+  if (activeNodes.length < 4) {
+    toast("Se requieren al menos 4 nodos activos para la ruta recomendada.");
+    return;
+  }
+  if (!hasEdges()) {
+    toast("No hay rutas activas. Usa RUTA para conectar puntos.");
+    return;
+  }
+
+  // Guardar el estado original de "hidden"
+  const originalHiddenStatus = new Map();
+  state.nodes.forEach(n => originalHiddenStatus.set(n.id, n.hidden));
+
+  let tour = [];
+  let fullPath = [];
+  let totalDistance = 0;
+  let firstSteps = null;
+  const visitedNodesOnFullPath = new Set();
+  let success = false;
+  let retryCounter = 0; // Evita un bucle infinito si el grafo está muy roto
+
+  // Intentar generar una ruta válida hasta 10 veces
+  while (!success && retryCounter < 10) {
+    retryCounter++;
+    
+    // Resetear variables para este intento
+    tour = [];
+    fullPath = [];
+    totalDistance = 0;
+    firstSteps = null;
+    visitedNodesOnFullPath.clear();
+    
+    // 1. Elegir un nodo de inicio aleatorio
+    let currentNode = activeNodes[Math.floor(Math.random() * activeNodes.length)];
+    tour.push(currentNode);
+    
+    let isStuck = false;
+
+    try {
+      // 2. Bucle para encontrar 3 nodos más (total 4)
+      for (let i = 0; i < 3; i++) {
+        
+        // --- LÓGICA DE BÚSQUEDA ---
+        // a. Ocultar todos los nodos ya visitados en la ruta
+        visitedNodesOnFullPath.forEach(id => {
+            if (state.nodes.has(id)) state.nodes.get(id).hidden = true;
+        });
+        // b. "Des-ocultar" el nodo actual para que sea el inicio
+        if (state.nodes.has(currentNode)) {
+            state.nodes.get(currentNode).hidden = false;
+        }
+
+        // c. Calcular Dijkstra desde el nodo actual
+        const { D, P, steps } = dijkstra(currentNode);
+
+        // d. Restaurar el estado original de "hidden" para el siguiente paso
+        originalHiddenStatus.forEach((wasHidden, id) => {
+            if (state.nodes.has(id)) state.nodes.get(id).hidden = wasHidden;
+        });
+
+        // e. Encontrar todos los nodos alcanzables
+        const reachable = Object.keys(P)
+            // Filtrar: que tengan predecesor, distancia finita, y no sea el mismo nodo (dist > 0)
+            .filter(id => P[id] && P[id].length > 0 && Number.isFinite(D[id]) && D[id] > 0);
+
+        if (reachable.length === 0) {
+          isStuck = true; // No hay a dónde ir desde este nodo
+          break; // Salir del for-loop, este intento falló
+        }
+
+        // f. Elegir un nuevo destino aleatorio de los alcanzables
+        const nextNode = reachable[Math.floor(Math.random() * reachable.length)];
+        tour.push(nextNode);
+
+        // g. Obtener la ruta y la distancia
+        const legPaths = allShortestPaths(P, currentNode, nextNode);
+        const legPath = legPaths[0];
+        const legDistance = D[nextNode];
+        totalDistance += legDistance;
+
+        // h. Guardar la ruta y los pasos
+        if (i === 0) {
+          fullPath = legPath;
+          firstSteps = steps; // Guardar solo los pasos del PRIMER tramo
+        } else {
+          fullPath = fullPath.concat(legPath.slice(1));
+        }
+
+        // i. Actualizar la lista de nodos visitados para la *siguiente* iteración
+        legPath.forEach(id => visitedNodesOnFullPath.add(id));
+        currentNode = nextNode; // El nuevo inicio es el destino anterior
+      }
+      // --- Fin del for-loop ---
+
+      if (!isStuck) {
+        success = true; // ¡Lo logramos! Salir del while-loop
+      }
+
+    } catch (e) {
+      console.error("Error en el intento de solveRecommended:", e);
+      isStuck = true; // Algo salió mal, reintentar
+    } finally {
+      // (Seguridad) Asegurarse de que el estado original *siempre* se restaure
+      originalHiddenStatus.forEach((wasHidden, id) => {
+          if (state.nodes.has(id)) state.nodes.get(id).hidden = wasHidden;
+      });
+    }
+  }
+  // --- Fin del while-loop ---
+
+  if (!success) {
+    toast("No se pudo generar una ruta aleatoria (intenta de nuevo).");
+    return;
+  }
+
+  // 3. Guardar estado y en sessionStorage
+  state.paths = [fullPath];
+  state.pathIndex = 0;
+  state.steps = firstSteps; 
+
+  const o = tour[0];
+  const d = tour[tour.length - 1];
+
+  S.setItem("matcomp_steps", JSON.stringify(firstSteps));
+  S.setItem("matcomp_paths", JSON.stringify(state.paths));
+  S.setItem("matcomp_pathIndex", String(state.pathIndex));
+  S.setItem("matcomp_summary", JSON.stringify({ o, d, dist: totalDistance, recommended: true }));
+
+  // 4. Actualizar UI
+  $("#outDistance").textContent = fmt(totalDistance) + " m";
+  $("#outStart").textContent = o;
+  $("#outEnd").textContent = d;
+  $("#outPath").textContent = fullPath.join(" ⇒ ");
+  $("#outAlt").textContent = `Tour recomendado (${tour.length} nodos)`;
+  $("#btnAltPath").disabled = true;
+
+  anim.playing = false; anim.seg = 0; anim.segT = 0; drawRoute(true);
+}
 
 $("#btnAltPath").onclick=()=>{
   if(state.paths.length<=1) return;
