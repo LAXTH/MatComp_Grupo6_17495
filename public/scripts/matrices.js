@@ -1,41 +1,317 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Paso a paso | Parque de las Leyendas</title>
-  <link rel="stylesheet" href="public/styles/pasos.css" />
-</head>
-<body>
-  <header class="topbar">
-    <h1>Guía interactiva del Parque de las Leyendas</h1>
-    <nav class="tabs">
-      <a href="index.html">PLANIFICAR</a>
-      <a href="pasos.html" aria-current="page">PASO A PASO</a>
-      <a href="matrices.html">MATRICES</a>
-    </nav>
-  </header>
+(() => {
+  "use strict";
+  
+  const $ = s => document.querySelector(s);
+  const S = sessionStorage;
+  const key = (a, b) => `${a}->${b}`;
+  
+  const OVERRIDE_DEMO = {
+    "K->L": 120, "L->K": 120, "L->P": 130, "P->L": 130, "P->O": 150, "O->P": 150, 
+    "O->M": 140, "M->O": 140, "M->E": 160, "E->M": 160, "K->B": 180, "B->K": 180, 
+    "B->C": 160, "C->B": 160, "C->D": 170, "D->C": 170, "D->E": 190, "E->D": 190
+  };
 
-  <main class="wrap">
-    <section class="card">
-      <h2>Paso a paso (Dijkstra)</h2>
-      <p id="summary" class="muted">Ve a <a href="index.html">Planificar</a>, calcula una ruta y regresa.</p>
+  function load() {
+    try {
+      const steps = JSON.parse(S.getItem("matcomp_steps") || "null");
+      const sum = JSON.parse(S.getItem("matcomp_summary") || "null");
+      
+      const msgEmpty = $("#msgEmpty");
+      
+      if (!steps || !steps.length || !sum || !sum.o || !sum.d) {
+        if (msgEmpty) {
+          msgEmpty.hidden = false;
+        }
+        document.querySelectorAll('.panel').forEach(panel => panel.style.display = 'none');
+        return;
+      }
+      
+      if (msgEmpty) msgEmpty.hidden = true;
+      document.querySelectorAll('.panel').forEach(panel => panel.style.display = 'block');
+      
+    } catch (error) {
+      console.error("Error en load():", error);
+    }
+  }
 
-      <table id="tbl" class="grid">
+  function readGraph() {
+    const raw = S.getItem("matcomp_graph");
+    if (!raw) return { nodes: [], edges: [], activeCount: 16 };
+    try { 
+      return JSON.parse(raw); 
+    } catch { 
+      return { nodes: [], edges: [], activeCount: 16 }; 
+    }
+  }
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const w3 = (A, B) => clamp(Math.round(Math.hypot(A.x - B.x, A.y - B.y) * 2.2 + 70), 100, 999);
+  const idsActive = g => g.nodes.filter(n => !n.inactive && !n.hidden).map(n => n.id).sort();
+  const coord = (g, id) => g.nodes.find(n => n.id === id);
+
+  function w(g, a, b) {
+    if (OVERRIDE_DEMO[key(a, b)] != null) return OVERRIDE_DEMO[key(a, b)];
+    const A = coord(g, a), B = coord(g, b); 
+    return A && B ? w3(A, B) : Infinity;
+  }
+
+  function undirectedEdges(g) {
+    const s = new Set(), out = [];
+    for (const e of g.edges) {
+      const kk = [e.from, e.to].sort().join("-");
+      if (s.has(kk)) continue;
+      s.add(kk);
+      out.push(e);
+    }
+    return out.filter(e => {
+      const A = coord(g, e.from), B = coord(g, e.to);
+      return A && B && !A.inactive && !A.hidden && !B.inactive && !B.hidden;
+    });
+  }
+
+  function buildAdj(g) {
+    const ids = idsActive(g), idx = Object.fromEntries(ids.map((v, i) => [v, i]));
+    const A = Array.from({ length: ids.length }, () => Array(ids.length).fill(0));
+    
+    for (const e of undirectedEdges(g)) {
+      const i = idx[e.from], j = idx[e.to];
+      if (i == null || j == null) continue;
+      A[i][j] = A[j][i] = 1;
+    }
+    return { ids, A };
+  }
+
+  function buildW(g) {
+    const ids = idsActive(g), idx = Object.fromEntries(ids.map((v, i) => [v, i]));
+    const INF = Infinity;
+    const W = Array.from({ length: ids.length }, (_, i) => 
+      Array.from({ length: ids.length }, (_, j) => i === j ? 0 : INF)
+    );
+    
+    for (const e of undirectedEdges(g)) {
+      const i = idx[e.from], j = idx[e.to];
+      if (i == null || j == null) continue;
+      const ww = w(g, e.from, e.to);
+      W[i][j] = W[j][i] = ww;
+    }
+    return { ids, W };
+  }
+
+  // Función para renderizar matriz de adyacencia
+  function renderAdjMatrix() {
+    const container = $("#mtxAdj");
+    if (!container) return;
+    
+    const g = readGraph();
+    const { ids, A } = buildAdj(g);
+    
+    let html = `
+      <table>
+        <caption>Matriz de Adyacencia (nodos activos)</caption>
         <thead>
           <tr>
-            <th>#</th>
-            <th>Nodo procesado</th>
-            <th>Visitados</th>
-            <th>Distancias (m)</th>
-            <th>Predecesores</th>
+            <th></th>
+            ${ids.map(id => `<th>${id}</th>`).join('')}
           </tr>
         </thead>
-        <tbody></tbody>
+        <tbody>
+    `;
+    
+    A.forEach((row, i) => {
+      html += `
+        <tr>
+          <th>${ids[i]}</th>
+          ${row.map(val => `<td>${val}</td>`).join('')}
+        </tr>
+      `;
+    });
+    
+    html += `
+        </tbody>
       </table>
-    </section>
-  </main>
+    `;
+    
+    container.innerHTML = html;
+  }
 
-  <script src="public/scripts/pasos.js"></script>
-</body>
-</html>
+  // Función para renderizar matriz de pesos
+  function renderWeightMatrix() {
+    const container = $("#mtxW");
+    if (!container) return;
+    
+    const g = readGraph();
+    const { ids, W } = buildW(g);
+    
+    let html = `
+      <table>
+        <caption>Matriz de Pesos (distancias en metros)</caption>
+        <thead>
+          <tr>
+            <th></th>
+            ${ids.map(id => `<th>${id}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    W.forEach((row, i) => {
+      html += `
+        <tr>
+          <th>${ids[i]}</th>
+          ${row.map(val => 
+            `<td>${Number.isFinite(val) ? val.toFixed(0) : "∞"}</td>`
+          ).join('')}
+        </tr>
+      `;
+    });
+    
+    html += `
+        </tbody>
+      </table>
+    `;
+    
+    container.innerHTML = html;
+  }
+
+  // Función para obtener los valores de Dijkstra como en el Excel
+  function getDijkstraStepValues(steps, sum) {
+    const allVertices = [...new Set(steps.flatMap(step => Object.keys(step.dist || {})))].sort();
+    
+    // Encontrar en qué paso se alcanzó el destino
+    let stepsUntilDestination = steps.length;
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].processed === sum.d) {
+        stepsUntilDestination = i + 1;
+        break;
+      }
+    }
+    
+    const maxSteps = stepsUntilDestination;
+    const vertexValues = {};
+    
+    // Inicializar todos con "–"
+    allVertices.forEach(vertex => {
+      vertexValues[vertex] = Array(maxSteps).fill("–");
+    });
+
+    // Para cada paso
+    for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
+      const step = steps[stepIndex];
+      
+      // Para cada vértice en este paso
+      for (const vertex of allVertices) {
+        const currentDist = step.dist[vertex];
+        
+        if (Number.isFinite(currentDist)) {
+          const predecessors = step.prev[vertex] || [];
+          let predecessor = "";
+          
+          if (predecessors.length > 0) {
+            // Encontrar el predecesor
+            for (let i = stepIndex; i >= 0; i--) {
+              const prevStep = steps[i];
+              if (predecessors.includes(prevStep.processed)) {
+                predecessor = prevStep.processed;
+                break;
+              }
+            }
+            if (!predecessor && predecessors.length > 0) {
+              predecessor = predecessors[0];
+            }
+          }
+          
+          const currentValue = `(${currentDist.toFixed(0)},${predecessor || vertex})`;
+          vertexValues[vertex][stepIndex] = currentValue;
+        }
+      }
+      
+      // Origen siempre tiene valor
+      if (Number.isFinite(step.dist[sum.o])) {
+        vertexValues[sum.o][stepIndex] = `(0,${sum.o})`;
+      }
+    }
+
+    // Mantener los valores en pasos posteriores (no poner "–" si ya tenía valor)
+    for (const vertex of allVertices) {
+      let lastValue = "–";
+      for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
+        if (vertexValues[vertex][stepIndex] !== "–") {
+          lastValue = vertexValues[vertex][stepIndex];
+        } else if (lastValue !== "–") {
+          vertexValues[vertex][stepIndex] = lastValue;
+        }
+      }
+    }
+    
+    return { allVertices, vertexValues, maxSteps };
+  }
+
+  // Función para determinar qué nodo pintar en cada paso
+  function getNodeToHighlight(stepIndex, steps, sum) {
+    // Paso 1: pintar el origen A
+    if (stepIndex === 0) {
+      return sum.o;
+    }
+    
+    // Pasos siguientes: pintar el nodo que se procesó en este paso
+    return steps[stepIndex].processed;
+  }
+
+  // Función principal para renderizar tabla de Dijkstra
+  function renderDijkstraTable() {
+    const container = $("#mtxTable");
+    if (!container) return;
+    
+    const steps = JSON.parse(S.getItem("matcomp_steps") || "[]");
+    const sum = JSON.parse(S.getItem("matcomp_summary") || "{}");
+    
+    if (!steps.length) {
+      container.innerHTML = '<p class="msg-empty">No hay datos de Dijkstra disponibles</p>';
+      return;
+    }
+
+    const { allVertices, vertexValues, maxSteps } = getDijkstraStepValues(steps, sum);
+
+    // Construir la tabla
+    let html = `
+      <caption>Algoritmo de Dijkstra: ${sum.o || '?'} → ${sum.d || '?'}</caption>
+      <thead>
+        <tr>
+          <th>Vértice</th>
+          ${Array.from({length: maxSteps}, (_, i) => `<th>Paso ${i + 1}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+    `;
+
+    allVertices.forEach(vertex => {
+      html += `<tr><th>${vertex}</th>`;
+      
+      for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
+        const currentValue = vertexValues[vertex][stepIndex];
+        const nodeToHighlight = getNodeToHighlight(stepIndex, steps, sum);
+        const isHighlighted = nodeToHighlight === vertex;
+        const style = isHighlighted ? 'style="background-color: #ffeb3b;"' : '';
+        
+        html += `<td ${style}>${currentValue}</td>`;
+      }
+      
+      html += `</tr>`;
+    });
+
+    html += `</tbody>`;
+    container.innerHTML = html;
+  }
+
+  // Solo un event listener para DOMContentLoaded
+  document.addEventListener("DOMContentLoaded", () => {
+    try {
+      load();
+      renderAdjMatrix();
+      renderWeightMatrix();
+      renderDijkstraTable();
+    } catch (error) {
+      console.error("Error en DOMContentLoaded:", error);
+    }
+  });
+})();
