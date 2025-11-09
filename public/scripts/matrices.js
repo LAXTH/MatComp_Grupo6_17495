@@ -1,3 +1,31 @@
+[file name]: image.png
+[file content begin]
+# Algoritmo de Dijkstra (paso a paso)
+
+**Algoritmo de Dijkstra: A – C**
+
+| Vértice    | Paso 1   | Paso 2   | Paso 3   | Paso 4   | Paso 5   |
+|---|---|---|---|---|---|
+| A    | (0,A)    | (0,A)    | (0,A)    | (0,A)    | (0,A)    |
+| B    | -    | (123,A)  | (123,A)  | (123,A)  | (123,A)  |
+| C    | -    | -    | -    | (283,B)  | (283,B)  |
+| D    | -    | -    | -    | -    | -    |
+| E    | -    | -    | -    | -    | (602,H)  |
+| F    | -    | -    | -    | -    | -    |
+| G    | -    | -    | (295,I)  | (295,I)  | (295,I)  |
+| H    | -    | -    | (242,I)  | (242,I)  | (242,I)  |
+| I    | -    | (101,A)  | (101,A)  | (101,A)  | (101,A)  |
+| J    | -    | -    | -    | -    | -    |
+| K    | -    | -    | -    | (303,B)  | (303,B)  |
+| L    | -    | -    | -    | -    | -    |
+| M    | -    | -    | -    | -    | -    |
+| N    | -    | -    | -    | -    | -    |
+| O    | -    | -    | -    | -    | -    |
+| P    | -    | -    | -    | -    | -    |
+
+
+[file content end]
+
 (() => {
   "use strict";
   
@@ -6,9 +34,11 @@
   const key = (a, b) => `${a}->${b}`;
   
   const OVERRIDE_DEMO = {
+    "A->B": 123, "B->A": 123, "B->C": 160, "C->B": 160, "B->K": 180, "K->B": 180,
+    "A->I": 101, "I->A": 101, "I->G": 194, "G->I": 194, "I->H": 141, "H->I": 141,
     "K->L": 120, "L->K": 120, "L->P": 130, "P->L": 130, "P->O": 150, "O->P": 150, 
-    "O->M": 140, "M->O": 140, "M->E": 160, "E->M": 160, "K->B": 180, "B->K": 180, 
-    "B->C": 160, "C->B": 160, "C->D": 170, "D->C": 170, "D->E": 190, "E->D": 190
+    "O->M": 140, "M->O": 140, "M->E": 160, "E->M": 160, "C->D": 170, "D->C": 170, 
+    "D->E": 190, "E->D": 190, "H->E": 360, "E->H": 360
   };
 
   function load() {
@@ -221,17 +251,8 @@
           let predecessor = "";
           
           if (predecessors.length > 0) {
-            // Encontrar el predecesor
-            for (let i = stepIndex; i >= 0; i--) {
-              const prevStep = steps[i];
-              if (predecessors.includes(prevStep.processed)) {
-                predecessor = prevStep.processed;
-                break;
-              }
-            }
-            if (!predecessor && predecessors.length > 0) {
-              predecessor = predecessors[0];
-            }
+            // Encontrar el predecesor correcto
+            predecessor = predecessors[0]; // Tomar el primer predecesor
           }
           
           const currentValue = `(${currentDist.toFixed(0)},${predecessor || vertex})`;
@@ -287,6 +308,7 @@
 
     // Construir la tabla
     let html = `
+      <table>
       <caption>Algoritmo de Dijkstra: ${sum.o || '?'} → ${sum.d || '?'}</caption>
       <thead>
         <tr>
@@ -312,7 +334,7 @@
       html += `</tr>`;
     });
 
-    html += `</tbody>`;
+    html += `</tbody></table>`;
     container.innerHTML = html;
   }
 
