@@ -1,31 +1,3 @@
-[file name]: image.png
-[file content begin]
-# Algoritmo de Dijkstra (paso a paso)
-
-**Algoritmo de Dijkstra: A – C**
-
-| Vértice    | Paso 1   | Paso 2   | Paso 3   | Paso 4   | Paso 5   |
-|---|---|---|---|---|---|
-| A    | (0,A)    | (0,A)    | (0,A)    | (0,A)    | (0,A)    |
-| B    | -    | (123,A)  | (123,A)  | (123,A)  | (123,A)  |
-| C    | -    | -    | -    | (283,B)  | (283,B)  |
-| D    | -    | -    | -    | -    | -    |
-| E    | -    | -    | -    | -    | (602,H)  |
-| F    | -    | -    | -    | -    | -    |
-| G    | -    | -    | (295,I)  | (295,I)  | (295,I)  |
-| H    | -    | -    | (242,I)  | (242,I)  | (242,I)  |
-| I    | -    | (101,A)  | (101,A)  | (101,A)  | (101,A)  |
-| J    | -    | -    | -    | -    | -    |
-| K    | -    | -    | -    | (303,B)  | (303,B)  |
-| L    | -    | -    | -    | -    | -    |
-| M    | -    | -    | -    | -    | -    |
-| N    | -    | -    | -    | -    | -    |
-| O    | -    | -    | -    | -    | -    |
-| P    | -    | -    | -    | -    | -    |
-
-
-[file content end]
-
 (() => {
   "use strict";
   
@@ -34,11 +6,9 @@
   const key = (a, b) => `${a}->${b}`;
   
   const OVERRIDE_DEMO = {
-    "A->B": 123, "B->A": 123, "B->C": 160, "C->B": 160, "B->K": 180, "K->B": 180,
-    "A->I": 101, "I->A": 101, "I->G": 194, "G->I": 194, "I->H": 141, "H->I": 141,
     "K->L": 120, "L->K": 120, "L->P": 130, "P->L": 130, "P->O": 150, "O->P": 150, 
-    "O->M": 140, "M->O": 140, "M->E": 160, "E->M": 160, "C->D": 170, "D->C": 170, 
-    "D->E": 190, "E->D": 190, "H->E": 360, "E->H": 360
+    "O->M": 140, "M->O": 140, "M->E": 160, "E->M": 160, "K->B": 180, "B->K": 180, 
+    "B->C": 160, "C->B": 160, "C->D": 170, "D->C": 170, "D->E": 190, "E->D": 190
   };
 
   function load() {
@@ -203,20 +173,6 @@
     container.innerHTML = html;
   }
 
-  // Función para reconstruir el camino óptimo
-  function getOptimalPath(steps, sum) {
-    const finalStep = steps[steps.length - 1];
-    const path = [sum.d];
-    let current = sum.d;
-    
-    while (current !== sum.o && finalStep.prev[current] && finalStep.prev[current].length > 0) {
-      current = finalStep.prev[current][0];
-      path.unshift(current);
-    }
-    
-    return path;
-  }
-
   // Función para obtener los valores de Dijkstra como en el Excel
   function getDijkstraStepValues(steps, sum) {
     const allVertices = [...new Set(steps.flatMap(step => Object.keys(step.dist || {})))].sort();
@@ -251,8 +207,17 @@
           let predecessor = "";
           
           if (predecessors.length > 0) {
-            // Encontrar el predecesor correcto
-            predecessor = predecessors[0]; // Tomar el primer predecesor
+            // Encontrar el predecesor
+            for (let i = stepIndex; i >= 0; i--) {
+              const prevStep = steps[i];
+              if (predecessors.includes(prevStep.processed)) {
+                predecessor = prevStep.processed;
+                break;
+              }
+            }
+            if (!predecessor && predecessors.length > 0) {
+              predecessor = predecessors[0];
+            }
           }
           
           const currentValue = `(${currentDist.toFixed(0)},${predecessor || vertex})`;
@@ -281,13 +246,15 @@
     return { allVertices, vertexValues, maxSteps };
   }
 
-  // Función para determinar qué nodo pintar (solo el camino óptimo)
-  function getNodeToHighlight(stepIndex, optimalPath) {
-    // Solo pintar nodos del camino óptimo
-    if (stepIndex < optimalPath.length) {
-      return optimalPath[stepIndex];
+  // Función para determinar qué nodo pintar en cada paso
+  function getNodeToHighlight(stepIndex, steps, sum) {
+    // Paso 1: pintar el origen A
+    if (stepIndex === 0) {
+      return sum.o;
     }
-    return null;
+    
+    // Pasos siguientes: pintar el nodo que se procesó en este paso
+    return steps[stepIndex].processed;
   }
 
   // Función principal para renderizar tabla de Dijkstra
@@ -304,11 +271,9 @@
     }
 
     const { allVertices, vertexValues, maxSteps } = getDijkstraStepValues(steps, sum);
-    const optimalPath = getOptimalPath(steps, sum);
 
     // Construir la tabla
     let html = `
-      <table>
       <caption>Algoritmo de Dijkstra: ${sum.o || '?'} → ${sum.d || '?'}</caption>
       <thead>
         <tr>
@@ -324,7 +289,7 @@
       
       for (let stepIndex = 0; stepIndex < maxSteps; stepIndex++) {
         const currentValue = vertexValues[vertex][stepIndex];
-        const nodeToHighlight = getNodeToHighlight(stepIndex, optimalPath);
+        const nodeToHighlight = getNodeToHighlight(stepIndex, steps, sum);
         const isHighlighted = nodeToHighlight === vertex;
         const style = isHighlighted ? 'style="background-color: #ffeb3b;"' : '';
         
@@ -334,7 +299,7 @@
       html += `</tr>`;
     });
 
-    html += `</tbody></table>`;
+    html += `</tbody>`;
     container.innerHTML = html;
   }
 
